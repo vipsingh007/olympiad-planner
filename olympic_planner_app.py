@@ -2,8 +2,15 @@ import streamlit as st
 import json
 from datetime import datetime, timedelta
 import database as db
+import os
 
 st.set_page_config(page_title="🏆 Olympiad Prep Planner", layout="wide", page_icon="🏆")
+
+# Get OpenAI API key for quiz generation
+try:
+    api_key = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", "")
+except:
+    api_key = ""
 
 # Olympiad syllabus by grade and subject
 SYLLABUS = {
@@ -87,9 +94,7 @@ if not st.session_state.authenticated:
             if name and password == PASSWORDS[grade]:
                 st.session_state.authenticated = True
                 st.session_state.current_user = {"name": name, "grade": grade}
-                
-                # Create/load student from database
-                db.get_or_create_student(name, grade)
+                st.session_state.student_data_loaded = False
                 st.success("✅ Welcome!")
                 st.rerun()
             elif name and password:
@@ -106,19 +111,33 @@ if not st.session_state.authenticated:
 name = st.session_state.current_user['name']
 grade = st.session_state.current_user['grade']
 
-# Load student data from database
-try:
-    student = db.get_or_create_student(name, grade)
-    completed_topics_db = db.get_completed_topics(name, grade)
-    completed_topics_list = [t['topic'] for t in completed_topics_db]
-    total_hours = db.get_total_study_hours(name, grade)
-    streak_days = student.get('streak_days', 0) if student else 0
-except Exception as e:
-    st.error(f"Database connection error: {e}")
-    st.info("Running in offline mode. Data won't be saved.")
-    completed_topics_list = []
-    total_hours = 0
-    streak_days = 0
+# Cache data in session state to avoid repeated database calls
+if 'student_data_loaded' not in st.session_state or not st.session_state.student_data_loaded:
+    try:
+        with st.spinner("Loading your data..."):
+            student = db.get_or_create_student(name, grade)
+            completed_topics_db = db.get_completed_topics(name, grade)
+            completed_topics_list = [t['topic'] for t in completed_topics_db]
+            total_hours = db.get_total_study_hours(name, grade)
+            streak_days = student.get('streak_days', 0) if student else 0
+            
+            # Store in session state
+            st.session_state.completed_topics_list = completed_topics_list
+            st.session_state.total_hours = total_hours
+            st.session_state.streak_days = streak_days
+            st.session_state.student_data_loaded = True
+    except Exception as e:
+        st.error(f"Database connection error: {e}")
+        st.info("Running in offline mode. Data won't be saved.")
+        st.session_state.completed_topics_list = []
+        st.session_state.total_hours = 0
+        st.session_state.streak_days = 0
+        st.session_state.student_data_loaded = True
+else:
+    # Use cached data
+    completed_topics_list = st.session_state.completed_topics_list
+    total_hours = st.session_state.total_hours
+    streak_days = st.session_state.streak_days
 
 # Title and header
 st.title("🏆 Kids Olympiad Prep Planner")
@@ -129,10 +148,17 @@ with st.sidebar:
     st.markdown(f"### 👋 Hi, {name}!")
     st.markdown(f"**Grade:** {grade}")
     
-    if st.button("🚪 Logout"):
-        st.session_state.authenticated = False
-        st.session_state.current_user = None
-        st.rerun()
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.session_state.student_data_loaded = False
+            st.rerun()
+    with col_btn2:
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.current_user = None
+            st.session_state.student_data_loaded = False
+            st.rerun()
     
     st.markdown("---")
     st.header("📊 Quick Stats")
@@ -150,97 +176,173 @@ with st.sidebar:
     """)
 
 # Main content tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📅 Weekly Planner", "📈 Progress Tracker", "📚 Study Resources", "🏅 Achievements"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📅 Weekly Planner", "📈 Progress Tracker", "📚 Study Resources", "🎯 Quiz", "🏅 Achievements"])
 
 with tab1:
     st.header(f"📅 Weekly Study Planner - {name}")
+    st.caption("Plan your week ahead. Track completion in the Progress Tracker tab.")
     
     # Week selector
-    week_date = st.date_input("Select week starting:", datetime.now())
-    week_key = week_date.strftime("%Y-W%U")
+    col_week1, col_week2 = st.columns([2, 1])
+    with col_week1:
+        week_date = st.date_input("📆 Select week starting:", datetime.now())
+        week_key = week_date.strftime("%Y-W%U")
+    with col_week2:
+        st.metric("Week #", week_key.split('-W')[1])
     
-    # Load existing weekly plan from database
-    try:
-        weekly_plan = db.get_weekly_plan(name, grade, week_key)
-        plan_dict = {p['day_of_week']: p for p in weekly_plan}
-    except:
-        plan_dict = {}
+    st.markdown("---")
+    
+    # Load ALL weekly plans once (not per day)
+    cache_key = f"weekly_plan_{week_key}"
+    if cache_key not in st.session_state:
+        try:
+            with st.spinner("Loading week..."):
+                all_plans = db.get_weekly_plan(name, grade, week_key)
+                st.session_state[cache_key] = all_plans
+        except:
+            st.session_state[cache_key] = []
+    else:
+        all_plans = st.session_state[cache_key]
     
     # Daily schedule
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    day_emojis = ["📘", "📗", "📙", "📕", "📔", "🌟", "🌈"]
     
-    st.subheader("📝 Create Weekly Schedule")
-    
-    for day in days:
-        existing = plan_dict.get(day, {})
+    for day_idx, day in enumerate(days):
+        # Get sessions for this day from cached data
+        day_plans = [p for p in all_plans if p['day_of_week'] == day]
         
-        with st.expander(f"**{day}**", expanded=False):
-            col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+        # Calculate total time for the day
+        total_day_minutes = sum([p.get('duration', 0) for p in day_plans])
+        session_count = len(day_plans)
+        
+        # Day card
+        st.markdown(f"### {day_emojis[day_idx]} {day}")
+        
+        if day_plans:
+            # Show sessions in a clean format
+            for session_idx, session in enumerate(day_plans):
+                subject = session.get('subject', 'N/A')
+                duration = session.get('duration', 0)
+                topics = session.get('topics', '').split(',') if session.get('topics') else []
+                
+                # Subject emoji mapping
+                subject_emoji = {"Math": "🔢", "Science": "🔬", "English": "📖", "Rest Day": "😴"}
+                
+                col_sess1, col_sess2 = st.columns([3, 4])
+                
+                with col_sess1:
+                    st.markdown(f"**{subject_emoji.get(subject, '📚')} {subject}** · {duration} min")
+                
+                with col_sess2:
+                    if topics and topics[0]:
+                        topics_display = ", ".join([t.strip() for t in topics[:3] if t.strip()])
+                        if len(topics) > 3:
+                            topics_display += f" +{len(topics)-3} more"
+                        st.caption(f"📝 {topics_display}")
+            
+            # Day summary
+            st.caption(f"📊 Total: {session_count} session{'s' if session_count != 1 else ''} · {total_day_minutes} minutes ({total_day_minutes/60:.1f} hours)")
+        else:
+            st.info(f"No sessions planned for {day}")
+        
+        # Add session button (compact)
+        with st.expander(f"➕ Add session", expanded=False):
+            col1, col2, col3, col4 = st.columns([2, 3, 1.5, 1])
             
             with col1:
-                subject = st.selectbox(
-                    "Subject:",
+                new_subject = st.selectbox(
+                    "Subject",
                     ["Math", "Science", "English", "Rest Day"],
-                    index=["Math", "Science", "English", "Rest Day"].index(existing.get('subject', 'Rest Day')) if existing.get('subject') in ["Math", "Science", "English", "Rest Day"] else 3,
-                    key=f"{grade}_{week_key}_{day}_subject"
+                    key=f"subj_{day}_{week_key}",
+                    label_visibility="collapsed"
                 )
             
             with col2:
-                if subject != "Rest Day":
-                    topics = SYLLABUS[grade][subject]
-                    topic = st.multiselect(
-                        "Topics:",
-                        topics,
-                        key=f"{grade}_{week_key}_{day}_topic"
+                if new_subject != "Rest Day":
+                    new_topics = st.multiselect(
+                        "Topics",
+                        SYLLABUS[grade][new_subject],
+                        key=f"topics_{day}_{week_key}",
+                        placeholder="Select topics..."
                     )
                 else:
-                    topic = ["Rest"]
+                    new_topics = ["Rest"]
             
             with col3:
-                if subject != "Rest Day":
-                    duration = st.number_input(
-                        "Duration (min):",
+                if new_subject != "Rest Day":
+                    new_duration = st.number_input(
+                        "Minutes",
                         min_value=15,
-                        max_value=120,
-                        value=existing.get('duration', STUDY_PLAN[grade].get(subject, 45)),
+                        max_value=180,
+                        value=STUDY_PLAN[grade].get(new_subject, 45),
                         step=15,
-                        key=f"{grade}_{week_key}_{day}_duration"
+                        key=f"dur_{day}_{week_key}",
+                        label_visibility="collapsed"
                     )
                 else:
-                    duration = 0
+                    new_duration = 0
+                    st.caption("Rest day 😴")
             
             with col4:
-                completed = st.checkbox(
-                    "✅ Done",
-                    value=existing.get('completed', False),
-                    key=f"{grade}_{week_key}_{day}_completed"
-                )
-                
-                # Save to database when marked complete
-                if completed and not existing.get('completed', False):
-                    try:
-                        # Save weekly plan
-                        db.save_weekly_plan(name, grade, week_key, day, subject, 
-                                          ','.join(topic) if topic else '', duration, completed)
-                        
-                        # Add study session
-                        if duration > 0:
-                            db.add_study_session(name, grade, subject, duration, 
-                                               ','.join(topic) if topic else None)
-                        
-                        # Mark topics as completed
-                        if topic and subject != "Rest Day":
-                            for t in topic:
-                                db.mark_topic_completed(name, grade, subject, t)
-                        
-                        st.success(f"✅ {day} session logged!")
-                    except Exception as e:
-                        st.error(f"Error saving: {e}")
+                if st.button("Add", key=f"add_{day}_{week_key}", type="primary", use_container_width=True):
+                    if new_subject != "Rest Day" and not new_topics:
+                        st.error("Please select topics")
+                    else:
+                        try:
+                            with st.spinner("Adding..."):
+                                db.save_weekly_plan(
+                                    name, grade, week_key, day, 
+                                    new_subject, 
+                                    ','.join(new_topics) if new_topics else '', 
+                                    new_duration, 
+                                    False
+                                )
+                                # Clear cache to force reload
+                                if cache_key in st.session_state:
+                                    del st.session_state[cache_key]
+                            st.success("✅ Added!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+        
+        st.markdown("---")
     
-    # Save plan button
-    if st.button("💾 Save This Week's Plan", type="primary"):
-        st.success(f"✅ Weekly plan saved for {name}!")
-        st.rerun()
+    # Weekly overview
+    st.markdown("### 📊 Week Overview")
+    
+    if all_plans:
+            total_sessions = len(all_plans)
+            total_minutes = sum([p.get('duration', 0) for p in all_plans])
+            
+            # Count by subject
+            subject_breakdown = {}
+            for plan in all_plans:
+                subj = plan.get('subject', 'Unknown')
+                subject_breakdown[subj] = subject_breakdown.get(subj, 0) + plan.get('duration', 0)
+            
+            col_ov1, col_ov2, col_ov3 = st.columns(3)
+            
+            with col_ov1:
+                st.metric("📅 Total Sessions", total_sessions)
+            
+            with col_ov2:
+                st.metric("⏱️ Total Time", f"{total_minutes} min", f"{total_minutes/60:.1f} hrs")
+            
+            with col_ov3:
+                avg_per_day = total_minutes / 7
+                st.metric("📈 Avg/Day", f"{avg_per_day:.0f} min")
+            
+            # Subject breakdown
+            if subject_breakdown:
+                st.markdown("**Time by Subject:**")
+                cols = st.columns(len(subject_breakdown))
+                for idx, (subj, mins) in enumerate(subject_breakdown.items()):
+                    with cols[idx]:
+                        emoji = {"Math": "🔢", "Science": "🔬", "English": "📖", "Rest Day": "😴"}.get(subj, "📚")
+                        st.metric(f"{emoji} {subj}", f"{mins} min")
+    else:
+        st.info("👆 Start planning your week by adding study sessions above!")
 
 with tab2:
     st.header(f"📈 Progress Tracker - {name}")
@@ -296,27 +398,54 @@ with tab2:
             if topic in completed_topics_list:
                 st.success("✅")
     
-    # Study time log
+    # Study session logger
     st.markdown("---")
-    st.subheader("⏱️ Log Study Session")
+    st.subheader("⏱️ Log Today's Study Session")
+    st.caption("After completing a study session, log it here to track your progress")
     
-    log_col1, log_col2, log_col3, log_col4 = st.columns(4)
-    with log_col1:
-        log_subject = st.selectbox("Subject:", ["Math", "Science", "English"], key="log_subject")
-    with log_col2:
-        log_duration = st.number_input("Duration (min):", min_value=15, max_value=180, value=45, step=15)
-    with log_col3:
-        log_date = st.date_input("Date:", datetime.now())
-    with log_col4:
+    col_log1, col_log2, col_log3, col_log4 = st.columns([2, 2, 1.5, 1.5])
+    
+    with col_log1:
+        log_subject = st.selectbox("Subject", ["Math", "Science", "English"], key="log_subject")
+    
+    with col_log2:
+        log_topics = st.multiselect(
+            "Topics covered",
+            SYLLABUS[grade][log_subject],
+            key="log_topics_multi",
+            placeholder="What did you study?"
+        )
+    
+    with col_log3:
+        log_duration = st.number_input("Duration (min)", min_value=5, max_value=240, value=45, step=5)
+    
+    with col_log4:
         st.write("")
         st.write("")
-        if st.button("➕ Add Session"):
-            try:
-                db.add_study_session(name, grade, log_subject, log_duration)
-                st.success(f"Added {log_duration} minutes of {log_subject}!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
+        if st.button("📝 Log Session", type="primary", use_container_width=True):
+            if not log_topics:
+                st.warning("Please select topics you studied")
+            else:
+                try:
+                    with st.spinner("Saving..."):
+                        # Add study session
+                        db.add_study_session(name, grade, log_subject, log_duration, ','.join(log_topics))
+                        
+                        # Mark topics as completed
+                        for topic in log_topics:
+                            db.mark_topic_completed(name, grade, log_subject, topic)
+                        
+                        # Update cache immediately
+                        st.session_state.total_hours += log_duration / 60.0
+                        for topic in log_topics:
+                            if topic not in st.session_state.completed_topics_list:
+                                st.session_state.completed_topics_list.append(topic)
+                    
+                    st.success(f"✅ Logged {log_duration} min of {log_subject}!")
+                    st.balloons()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
     
     # Weekly summary
     st.markdown("---")
@@ -413,6 +542,214 @@ with tab3:
     """)
 
 with tab4:
+    st.header(f"🎯 Knowledge Quiz - {name}")
+    st.caption("Test your understanding of completed topics!")
+    
+    # Initialize quiz state
+    if 'quiz_questions' not in st.session_state:
+        st.session_state.quiz_questions = None
+    if 'quiz_answers' not in st.session_state:
+        st.session_state.quiz_answers = {}
+    if 'quiz_submitted' not in st.session_state:
+        st.session_state.quiz_submitted = False
+    if 'quiz_score' not in st.session_state:
+        st.session_state.quiz_score = None
+    
+    # Show completed topics by subject
+    st.subheader("📚 Select Topics to Test")
+    
+    # Filter completed topics by subject
+    completed_by_subject = {}
+    for subject in ["Math", "Science", "English"]:
+        completed = [t for t in completed_topics_list if t in SYLLABUS[grade][subject]]
+        if completed:
+            completed_by_subject[subject] = completed
+    
+    if not completed_by_subject:
+        st.info("👆 Complete some topics first in the Progress Tracker tab, then come back here to test your knowledge!")
+    else:
+        # Subject selection
+        quiz_subject = st.selectbox("Choose subject to test:", list(completed_by_subject.keys()), key="quiz_subject")
+        
+        # Topic selection
+        quiz_topics = st.multiselect(
+            f"Select {quiz_subject} topics to test (1-5 topics recommended):",
+            completed_by_subject[quiz_subject],
+            key="quiz_topics_select"
+        )
+        
+        # Number of questions
+        col_q1, col_q2 = st.columns(2)
+        with col_q1:
+            num_questions = st.slider("Number of questions:", 5, 10, 5)
+        with col_q2:
+            difficulty = st.select_slider("Difficulty:", ["Easy", "Medium", "Hard"], value="Medium")
+        
+        # Generate quiz button
+        if st.button("🎲 Generate Quiz", type="primary", disabled=len(quiz_topics) == 0):
+            if not quiz_topics:
+                st.warning("Please select at least one topic!")
+            else:
+                with st.spinner(f"🤖 Generating {num_questions} {difficulty.lower()} questions..."):
+                    try:
+                        # Create prompt for OpenAI
+                        topics_str = ", ".join(quiz_topics)
+                        prompt = f"""Create {num_questions} multiple choice questions for a {grade} student about these {quiz_subject} topics: {topics_str}.
+
+Difficulty level: {difficulty}
+Grade level: {grade}
+
+Requirements:
+1. Questions should be age-appropriate for {grade}
+2. Each question should have 4 options (A, B, C, D)
+3. Only ONE correct answer per question
+4. Cover different topics from the list
+5. Make questions practical and engaging
+
+Return ONLY valid JSON with this exact structure (no markdown, no code blocks):
+{{
+  "questions": [
+    {{
+      "question": "Question text here?",
+      "options": {{
+        "A": "Option A text",
+        "B": "Option B text",
+        "C": "Option C text",
+        "D": "Option D text"
+      }},
+      "correct_answer": "A",
+      "explanation": "Brief explanation why this is correct",
+      "topic": "Specific topic from the list"
+    }}
+  ]
+}}"""
+                        
+                        from openai import OpenAI
+                        client = OpenAI(api_key=api_key)
+                        
+                        response = client.chat.completions.create(
+                            model="gpt-4",
+                            messages=[
+                                {"role": "system", "content": "You are an educational quiz generator. Always return valid JSON only."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.7
+                        )
+                        
+                        quiz_data = json.loads(response.choices[0].message.content)
+                        st.session_state.quiz_questions = quiz_data['questions']
+                        st.session_state.quiz_answers = {}
+                        st.session_state.quiz_submitted = False
+                        st.session_state.quiz_score = None
+                        st.success(f"✅ Generated {len(quiz_data['questions'])} questions!")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Error generating quiz: {e}")
+                        st.info("Try again or select different topics.")
+        
+        # Display quiz if generated
+        if st.session_state.quiz_questions:
+            st.markdown("---")
+            st.subheader("📝 Answer the Questions")
+            
+            if not st.session_state.quiz_submitted:
+                # Show questions
+                for idx, q in enumerate(st.session_state.quiz_questions, 1):
+                    with st.container():
+                        st.markdown(f"### Question {idx}")
+                        st.markdown(f"**Topic:** {q.get('topic', 'N/A')}")
+                        st.markdown(f"**{q['question']}**")
+                        
+                        # Radio buttons for options
+                        answer = st.radio(
+                            f"Select your answer:",
+                            options=list(q['options'].keys()),
+                            format_func=lambda x: f"{x}) {q['options'][x]}",
+                            key=f"q_{idx}",
+                            index=None
+                        )
+                        
+                        if answer:
+                            st.session_state.quiz_answers[idx] = answer
+                        
+                        st.markdown("---")
+                
+                # Submit button
+                if len(st.session_state.quiz_answers) == len(st.session_state.quiz_questions):
+                    if st.button("✅ Submit Quiz", type="primary", use_container_width=True):
+                        # Calculate score
+                        correct = 0
+                        for idx, q in enumerate(st.session_state.quiz_questions, 1):
+                            if st.session_state.quiz_answers.get(idx) == q['correct_answer']:
+                                correct += 1
+                        
+                        st.session_state.quiz_score = correct
+                        st.session_state.quiz_submitted = True
+                        st.rerun()
+                else:
+                    st.warning(f"⚠️ Please answer all {len(st.session_state.quiz_questions)} questions before submitting.")
+            
+            else:
+                # Show results
+                score = st.session_state.quiz_score
+                total = len(st.session_state.quiz_questions)
+                percentage = (score / total * 100)
+                
+                st.markdown("### 📊 Quiz Results")
+                
+                # Score display
+                col_score1, col_score2, col_score3 = st.columns(3)
+                with col_score1:
+                    st.metric("Score", f"{score}/{total}")
+                with col_score2:
+                    st.metric("Percentage", f"{percentage:.0f}%")
+                with col_score3:
+                    if percentage >= 80:
+                        st.metric("Grade", "⭐ Excellent!", delta="Great job!")
+                    elif percentage >= 60:
+                        st.metric("Grade", "👍 Good!", delta="Keep practicing")
+                    else:
+                        st.metric("Grade", "📚 Needs work", delta="Review topics")
+                
+                # Show answers
+                st.markdown("---")
+                st.subheader("📋 Answer Review")
+                
+                for idx, q in enumerate(st.session_state.quiz_questions, 1):
+                    user_answer = st.session_state.quiz_answers.get(idx)
+                    correct_answer = q['correct_answer']
+                    is_correct = user_answer == correct_answer
+                    
+                    with st.expander(
+                        f"{'✅' if is_correct else '❌'} Question {idx}: {q['question'][:50]}...",
+                        expanded=not is_correct
+                    ):
+                        st.markdown(f"**{q['question']}**")
+                        st.markdown(f"**Your answer:** {user_answer}) {q['options'][user_answer] if user_answer else 'Not answered'}")
+                        
+                        if is_correct:
+                            st.success(f"✅ Correct!")
+                        else:
+                            st.error(f"❌ Wrong. Correct answer: {correct_answer}) {q['options'][correct_answer]}")
+                        
+                        st.info(f"💡 **Explanation:** {q.get('explanation', 'N/A')}")
+                
+                # Action buttons
+                st.markdown("---")
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("🔄 Take New Quiz", type="primary", use_container_width=True):
+                        st.session_state.quiz_questions = None
+                        st.session_state.quiz_answers = {}
+                        st.session_state.quiz_submitted = False
+                        st.session_state.quiz_score = None
+                        st.rerun()
+                with col_btn2:
+                    if st.button("📚 Review Topics", use_container_width=True):
+                        st.info("Go to Study Resources tab to review!")
+
+with tab5:
     st.header(f"🏅 Achievements - {name}")
     
     # Achievement badges
