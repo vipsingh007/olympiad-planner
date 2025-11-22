@@ -7,10 +7,21 @@ import os
 st.set_page_config(page_title="🏆 Olympiad Prep Planner", layout="wide", page_icon="🏆")
 
 # Get OpenAI API key for quiz generation
-try:
-    api_key = os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
-except:
-    api_key = ""
+def get_openai_key():
+    """Get OpenAI API key from environment or secrets"""
+    # Try environment variable first
+    key = os.getenv("OPENAI_API_KEY")
+    if key:
+        return key
+    
+    # Try Streamlit secrets
+    try:
+        key = st.secrets["OPENAI_API_KEY"]
+        return key
+    except (KeyError, AttributeError):
+        return None
+
+api_key = get_openai_key()
 
 # Olympiad syllabus by grade and subject
 SYLLABUS = {
@@ -577,6 +588,20 @@ with tab4:
             completed_by_subject[quiz_subject],
             key="quiz_topics_select"
         )
+        
+        # Check if API key is available
+        if not api_key:
+            st.error("❌ OpenAI API key not found! Quiz feature requires an API key.")
+            st.info("""
+            **To fix this:**
+            1. Go to Streamlit Cloud → Your app → Settings → Secrets
+            2. Add this line:
+            ```
+            OPENAI_API_KEY = "your-openai-api-key-here"
+            ```
+            3. Save and wait for app to restart
+            """)
+            st.stop()
         
         # Number of questions
         col_q1, col_q2 = st.columns(2)
