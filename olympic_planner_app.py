@@ -1,42 +1,9 @@
 import streamlit as st
 import json
 from datetime import datetime, timedelta
-import pandas as pd
-
-
-st.set_page_config(page_title="🏆 Olympiad Prep Planner", layout="wide", page_icon="🏆")
-
-# Enable wide mode and session state persistence
-if 'initialized' not in st.session_state:
-    st.session_state.initialized = True
-
+import database as db
 
 st.set_page_config(page_title="🏆 Olympiad Prep Planner", layout="wide", page_icon="🏆")
-
-
-# Initialize session state
-if "students" not in st.session_state:
-    st.session_state.students = {
-        "Grade 3": {
-            "name": "Student 1",
-            "weekly_plan": {},
-            "progress": {},
-            "completed_topics": [],
-            "total_hours": 0,
-            "streak_days": 0
-        },
-        "Grade 5": {
-            "name": "Student 2",
-            "weekly_plan": {},
-            "progress": {},
-            "completed_topics": [],
-            "total_hours": 0,
-            "streak_days": 0
-        }
-    }
-
-if "current_week" not in st.session_state:
-    st.session_state.current_week = datetime.now().strftime("%Y-W%U")
 
 # Olympiad syllabus by grade and subject
 SYLLABUS = {
@@ -87,32 +54,91 @@ SYLLABUS = {
 
 # Study time recommendations
 STUDY_PLAN = {
-    "Grade 3": {"Math": 45, "Science": 30, "English": 30},  # minutes per session
+    "Grade 3": {"Math": 45, "Science": 30, "English": 30},
     "Grade 5": {"Math": 60, "Science": 45, "English": 45}
 }
+
+# Initialize session state
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
+
+# Simple authentication
+if not st.session_state.authenticated:
+    st.title("🏆 Welcome to Olympiad Prep!")
+    st.markdown("### Login to track your progress")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("### 🎓")
+        
+        name = st.text_input("Enter your name:")
+        grade = st.selectbox("Select your grade:", ["Grade 3", "Grade 5"])
+        password = st.text_input("Secret Password:", type="password")
+        
+        # Simple password
+        PASSWORDS = {
+            "Grade 3": "champ3",
+            "Grade 5": "champ5"
+        }
+        
+        if st.button("🚀 Start Learning!", type="primary"):
+            if name and password == PASSWORDS[grade]:
+                st.session_state.authenticated = True
+                st.session_state.current_user = {"name": name, "grade": grade}
+                
+                # Create/load student from database
+                db.get_or_create_student(name, grade)
+                st.success("✅ Welcome!")
+                st.rerun()
+            elif name and password:
+                st.error("❌ Wrong password! Ask Mom or Dad for help.")
+            else:
+                st.warning("⚠️ Please enter your name and password")
+        
+        st.markdown("---")
+        st.info("**Passwords:**\n- Grade 3: `champ3`\n- Grade 5: `champ5`")
+    
+    st.stop()
+
+# User is authenticated - load their data
+name = st.session_state.current_user['name']
+grade = st.session_state.current_user['grade']
+
+# Load student data from database
+try:
+    student = db.get_or_create_student(name, grade)
+    completed_topics_db = db.get_completed_topics(name, grade)
+    completed_topics_list = [t['topic'] for t in completed_topics_db]
+    total_hours = db.get_total_study_hours(name, grade)
+    streak_days = student.get('streak_days', 0) if student else 0
+except Exception as e:
+    st.error(f"Database connection error: {e}")
+    st.info("Running in offline mode. Data won't be saved.")
+    completed_topics_list = []
+    total_hours = 0
+    streak_days = 0
 
 # Title and header
 st.title("🏆 Kids Olympiad Prep Planner")
 st.markdown("**Systematic preparation for Math, Science & English Olympiads**")
 
-# Sidebar - Student selection
+# Sidebar
 with st.sidebar:
-    st.header("👥 Select Student")
-    selected_student = st.radio("Choose:", ["Grade 3", "Grade 5"])
+    st.markdown(f"### 👋 Hi, {name}!")
+    st.markdown(f"**Grade:** {grade}")
     
-    student_name = st.text_input(
-        f"Student Name:",
-        value=st.session_state.students[selected_student]["name"],
-        key=f"name_{selected_student}"
-    )
-    st.session_state.students[selected_student]["name"] = student_name
+    if st.button("🚪 Logout"):
+        st.session_state.authenticated = False
+        st.session_state.current_user = None
+        st.rerun()
     
     st.markdown("---")
     st.header("📊 Quick Stats")
-    student_data = st.session_state.students[selected_student]
-    st.metric("Total Study Hours", f"{student_data['total_hours']:.1f}")
-    st.metric("Topics Completed", len(student_data['completed_topics']))
-    st.metric("Current Streak", f"{student_data['streak_days']} days")
+    st.metric("Total Study Hours", f"{total_hours:.1f}")
+    st.metric("Topics Completed", len(completed_topics_list))
+    st.metric("Current Streak", f"{streak_days} days")
     
     st.markdown("---")
     st.header("🎯 Target Olympiads")
@@ -127,13 +153,18 @@ with st.sidebar:
 tab1, tab2, tab3, tab4 = st.tabs(["📅 Weekly Planner", "📈 Progress Tracker", "📚 Study Resources", "🏅 Achievements"])
 
 with tab1:
-    st.header(f"📅 Weekly Study Planner - {student_name}")
+    st.header(f"📅 Weekly Study Planner - {name}")
     
     # Week selector
-    col_week1, col_week2, col_week3 = st.columns([2, 1, 1])
-    with col_week1:
-        week_date = st.date_input("Select week starting:", datetime.now())
-        week_key = week_date.strftime("%Y-W%U")
+    week_date = st.date_input("Select week starting:", datetime.now())
+    week_key = week_date.strftime("%Y-W%U")
+    
+    # Load existing weekly plan from database
+    try:
+        weekly_plan = db.get_weekly_plan(name, grade, week_key)
+        plan_dict = {p['day_of_week']: p for p in weekly_plan}
+    except:
+        plan_dict = {}
     
     # Daily schedule
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -141,6 +172,8 @@ with tab1:
     st.subheader("📝 Create Weekly Schedule")
     
     for day in days:
+        existing = plan_dict.get(day, {})
+        
         with st.expander(f"**{day}**", expanded=False):
             col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
             
@@ -148,16 +181,17 @@ with tab1:
                 subject = st.selectbox(
                     "Subject:",
                     ["Math", "Science", "English", "Rest Day"],
-                    key=f"{selected_student}_{week_key}_{day}_subject"
+                    index=["Math", "Science", "English", "Rest Day"].index(existing.get('subject', 'Rest Day')) if existing.get('subject') in ["Math", "Science", "English", "Rest Day"] else 3,
+                    key=f"{grade}_{week_key}_{day}_subject"
                 )
             
             with col2:
                 if subject != "Rest Day":
-                    topics = SYLLABUS[selected_student][subject]
+                    topics = SYLLABUS[grade][subject]
                     topic = st.multiselect(
                         "Topics:",
                         topics,
-                        key=f"{selected_student}_{week_key}_{day}_topic"
+                        key=f"{grade}_{week_key}_{day}_topic"
                     )
                 else:
                     topic = ["Rest"]
@@ -168,9 +202,9 @@ with tab1:
                         "Duration (min):",
                         min_value=15,
                         max_value=120,
-                        value=STUDY_PLAN[selected_student].get(subject, 45),
+                        value=existing.get('duration', STUDY_PLAN[grade].get(subject, 45)),
                         step=15,
-                        key=f"{selected_student}_{week_key}_{day}_duration"
+                        key=f"{grade}_{week_key}_{day}_duration"
                     )
                 else:
                     duration = 0
@@ -178,32 +212,45 @@ with tab1:
             with col4:
                 completed = st.checkbox(
                     "✅ Done",
-                    key=f"{selected_student}_{week_key}_{day}_completed"
+                    value=existing.get('completed', False),
+                    key=f"{grade}_{week_key}_{day}_completed"
                 )
                 
-                if completed and duration > 0:
-                    # Update progress
-                    if topic:
-                        for t in topic:
-                            if t not in st.session_state.students[selected_student]['completed_topics']:
-                                st.session_state.students[selected_student]['completed_topics'].append(t)
-                        st.session_state.students[selected_student]['total_hours'] += duration / 60
+                # Save to database when marked complete
+                if completed and not existing.get('completed', False):
+                    try:
+                        # Save weekly plan
+                        db.save_weekly_plan(name, grade, week_key, day, subject, 
+                                          ','.join(topic) if topic else '', duration, completed)
+                        
+                        # Add study session
+                        if duration > 0:
+                            db.add_study_session(name, grade, subject, duration, 
+                                               ','.join(topic) if topic else None)
+                        
+                        # Mark topics as completed
+                        if topic and subject != "Rest Day":
+                            for t in topic:
+                                db.mark_topic_completed(name, grade, subject, t)
+                        
+                        st.success(f"✅ {day} session logged!")
+                    except Exception as e:
+                        st.error(f"Error saving: {e}")
     
     # Save plan button
-    if st.button("💾 Save This Week's Plan"):
-        st.success(f"✅ Weekly plan saved for {student_name}!")
+    if st.button("💾 Save This Week's Plan", type="primary"):
+        st.success(f"✅ Weekly plan saved for {name}!")
+        st.rerun()
 
 with tab2:
-    st.header(f"📈 Progress Tracker - {student_name}")
-    
-    student_data = st.session_state.students[selected_student]
+    st.header(f"📈 Progress Tracker - {name}")
     
     # Overall progress by subject
     st.subheader("📊 Subject-wise Topic Completion")
     
     for subject in ["Math", "Science", "English"]:
-        total_topics = len(SYLLABUS[selected_student][subject])
-        completed = [t for t in student_data['completed_topics'] if t in SYLLABUS[selected_student][subject]]
+        total_topics = len(SYLLABUS[grade][subject])
+        completed = [t for t in completed_topics_list if t in SYLLABUS[grade][subject]]
         completed_count = len(completed)
         progress_pct = (completed_count / total_topics * 100) if total_topics > 0 else 0
         
@@ -221,25 +268,32 @@ with tab2:
     
     subject_tab = st.selectbox("Select subject to track:", ["Math", "Science", "English"], key="progress_subject")
     
-    topics = SYLLABUS[selected_student][subject_tab]
+    topics = SYLLABUS[grade][subject_tab]
     
     for i, topic in enumerate(topics):
         col_topic1, col_topic2 = st.columns([4, 1])
         with col_topic1:
-            is_completed = topic in student_data['completed_topics']
-            if st.checkbox(
+            is_completed = topic in completed_topics_list
+            new_state = st.checkbox(
                 topic,
                 value=is_completed,
-                key=f"topic_check_{selected_student}_{subject_tab}_{i}"
-            ):
-                if topic not in student_data['completed_topics']:
-                    student_data['completed_topics'].append(topic)
-            else:
-                if topic in student_data['completed_topics']:
-                    student_data['completed_topics'].remove(topic)
+                key=f"topic_check_{grade}_{subject_tab}_{i}"
+            )
+            
+            # Update database if state changed
+            if new_state != is_completed:
+                try:
+                    if new_state:
+                        db.mark_topic_completed(name, grade, subject_tab, topic)
+                        st.rerun()
+                    else:
+                        db.unmark_topic(name, grade, subject_tab, topic)
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error updating: {e}")
         
         with col_topic2:
-            if topic in student_data['completed_topics']:
+            if topic in completed_topics_list:
                 st.success("✅")
     
     # Study time log
@@ -257,8 +311,12 @@ with tab2:
         st.write("")
         st.write("")
         if st.button("➕ Add Session"):
-            st.session_state.students[selected_student]['total_hours'] += log_duration / 60
-            st.success(f"Added {log_duration} minutes of {log_subject}!")
+            try:
+                db.add_study_session(name, grade, log_subject, log_duration)
+                st.success(f"Added {log_duration} minutes of {log_subject}!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
     
     # Weekly summary
     st.markdown("---")
@@ -266,12 +324,12 @@ with tab2:
     
     sum_col1, sum_col2, sum_col3 = st.columns(3)
     with sum_col1:
-        st.metric("Study Hours", f"{student_data['total_hours']:.1f} hrs")
+        st.metric("Study Hours", f"{total_hours:.1f} hrs")
     with sum_col2:
-        st.metric("Topics Mastered", len(student_data['completed_topics']))
+        st.metric("Topics Mastered", len(completed_topics_list))
     with sum_col3:
-        total_topics_all = sum(len(SYLLABUS[selected_student][s]) for s in ["Math", "Science", "English"])
-        overall_pct = (len(student_data['completed_topics']) / total_topics_all * 100) if total_topics_all > 0 else 0
+        total_topics_all = sum(len(SYLLABUS[grade][s]) for s in ["Math", "Science", "English"])
+        overall_pct = (len(completed_topics_list) / total_topics_all * 100) if total_topics_all > 0 else 0
         st.metric("Overall Progress", f"{overall_pct:.1f}%")
 
 with tab3:
@@ -355,9 +413,7 @@ with tab3:
     """)
 
 with tab4:
-    st.header(f"🏅 Achievements - {student_name}")
-    
-    student_data = st.session_state.students[selected_student]
+    st.header(f"🏅 Achievements - {name}")
     
     # Achievement badges
     st.subheader("🎖️ Badges Earned")
@@ -367,29 +423,29 @@ with tab4:
     # Define badges based on progress
     badges = []
     
-    if student_data['total_hours'] >= 10:
+    if total_hours >= 10:
         badges.append(("🕐", "10 Hour Club"))
-    if student_data['total_hours'] >= 25:
+    if total_hours >= 25:
         badges.append(("⏰", "25 Hour Champion"))
-    if student_data['total_hours'] >= 50:
+    if total_hours >= 50:
         badges.append(("🏆", "50 Hour Master"))
     
-    if len(student_data['completed_topics']) >= 10:
+    if len(completed_topics_list) >= 10:
         badges.append(("📚", "10 Topics Done"))
-    if len(student_data['completed_topics']) >= 25:
+    if len(completed_topics_list) >= 25:
         badges.append(("📖", "25 Topics Expert"))
     
-    if student_data['streak_days'] >= 7:
+    if streak_days >= 7:
         badges.append(("🔥", "Week Streak"))
-    if student_data['streak_days'] >= 30:
+    if streak_days >= 30:
         badges.append(("⚡", "Month Streak"))
     
     # Display badges
     if badges:
-        for i, (emoji, name) in enumerate(badges):
+        for i, (emoji, badge_name) in enumerate(badges):
             with [badge_col1, badge_col2, badge_col3, badge_col4][i % 4]:
                 st.markdown(f"### {emoji}")
-                st.caption(name)
+                st.caption(badge_name)
     else:
         st.info("Keep studying to earn badges! 🌟")
     
@@ -406,7 +462,7 @@ with tab4:
         (50, "👑 Olympiad Ready!")
     ]
     
-    completed_count = len(student_data['completed_topics'])
+    completed_count = len(completed_topics_list)
     
     for target, title in milestones:
         progress = min(completed_count / target, 1.0)
@@ -419,8 +475,8 @@ with tab4:
     # Motivational message
     st.subheader("💪 Keep Going!")
     
-    total_topics_all = sum(len(SYLLABUS[selected_student][s]) for s in ["Math", "Science", "English"])
-    remaining = total_topics_all - len(student_data['completed_topics'])
+    total_topics_all = sum(len(SYLLABUS[grade][s]) for s in ["Math", "Science", "English"])
+    remaining = total_topics_all - len(completed_topics_list)
     
     if remaining > 30:
         st.info(f"🌱 Great start! You have {remaining} topics to go. One day at a time!")
@@ -443,15 +499,3 @@ st.markdown("""
 <b>Stay Healthy</b> | Exercise, healthy food, and water boost brain power!</p>
 </div>
 """, unsafe_allow_html=True)
-
-# Export data option
-with st.sidebar:
-    st.markdown("---")
-    if st.button("💾 Export Progress Data"):
-        data_export = json.dumps(st.session_state.students, indent=2)
-        st.download_button(
-            label="Download JSON",
-            data=data_export,
-            file_name=f"olympiad_progress_{datetime.now().strftime('%Y%m%d')}.json",
-            mime="application/json"
-        )
