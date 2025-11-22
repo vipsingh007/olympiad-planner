@@ -3,7 +3,16 @@ import json
 from datetime import datetime, timedelta
 import pandas as pd
 
+
 st.set_page_config(page_title="🏆 Olympiad Prep Planner", layout="wide", page_icon="🏆")
+
+# Enable wide mode and session state persistence
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = True
+
+
+st.set_page_config(page_title="🏆 Olympiad Prep Planner", layout="wide", page_icon="🏆")
+
 
 # Initialize session state
 if "students" not in st.session_state:
