@@ -8,7 +8,7 @@ st.set_page_config(page_title="🏆 Olympiad Prep Planner", layout="wide", page_
 
 # Get OpenAI API key for quiz generation
 try:
-    api_key = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", "")
+    api_key = os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
 except:
     api_key = ""
 
