@@ -91,34 +91,249 @@ if not st.session_state.authenticated:
     with col2:
         st.markdown("### 🎓")
         
-        name = st.text_input("Enter your name:")
-        grade = st.selectbox("Select your grade:", ["Grade 3", "Grade 5"])
-        password = st.text_input("Secret Password:", type="password")
+        user_type = st.radio("👤 I am:", ["Student", "Parent"], horizontal=True)
         
-        # Simple password
-        PASSWORDS = {
-            "Grade 3": "champ3",
-            "Grade 5": "champ5"
-        }
+        if user_type == "Student":
+            name = st.text_input("Enter your name:")
+            grade = st.selectbox("Select your grade:", ["Grade 3", "Grade 5"])
+            password = st.text_input("Secret Password:", type="password")
+            
+            # Simple password
+            PASSWORDS = {
+                "Grade 3": "champ3",
+                "Grade 5": "champ5"
+            }
+            
+            if st.button("🚀 Start Learning!", type="primary"):
+                if name and password == PASSWORDS[grade]:
+                    st.session_state.authenticated = True
+                    st.session_state.current_user = {"name": name, "grade": grade, "type": "student"}
+                    st.session_state.student_data_loaded = False
+                    st.success("✅ Welcome!")
+                    st.rerun()
+                elif name and password:
+                    st.error("❌ Wrong password! Ask Mom or Dad for help.")
+                else:
+                    st.warning("⚠️ Please enter your name and password")
+            
+            st.markdown("---")
+            st.info("**Passwords:**\n- Grade 3: `champ3`\n- Grade 5: `champ5`")
         
-        if st.button("🚀 Start Learning!", type="primary"):
-            if name and password == PASSWORDS[grade]:
-                st.session_state.authenticated = True
-                st.session_state.current_user = {"name": name, "grade": grade}
-                st.session_state.student_data_loaded = False
-                st.success("✅ Welcome!")
-                st.rerun()
-            elif name and password:
-                st.error("❌ Wrong password! Ask Mom or Dad for help.")
-            else:
-                st.warning("⚠️ Please enter your name and password")
-        
-        st.markdown("---")
-        st.info("**Passwords:**\n- Grade 3: `champ3`\n- Grade 5: `champ5`")
+        else:  # Parent
+            parent_password = st.text_input("🔐 Parent Password:", type="password", placeholder="Enter parent password")
+            
+            if st.button("📊 View Dashboard", type="primary"):
+                if parent_password == "parent2024":
+                    st.session_state.authenticated = True
+                    st.session_state.current_user = {"name": "Parent", "grade": None, "type": "parent"}
+                    st.session_state.student_data_loaded = False
+                    st.success("✅ Welcome, Parent!")
+                    st.rerun()
+                elif parent_password:
+                    st.error("❌ Incorrect password!")
+                else:
+                    st.warning("⚠️ Please enter password")
+            
+            st.markdown("---")
+            st.info("**Parent Password:** `parent2024`")
     
     st.stop()
 
-# User is authenticated - load their data
+# User is authenticated - check if parent or student
+user_type = st.session_state.current_user.get('type', 'student')
+
+# PARENT DASHBOARD
+if user_type == "parent":
+    st.title("📊 Parent Dashboard")
+    st.markdown("**Monitor your kids' Olympiad preparation progress**")
+    
+    # Logout button in sidebar
+    with st.sidebar:
+        st.markdown("### 👋 Hi, Parent!")
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.current_user = None
+            st.rerun()
+        
+        st.markdown("---")
+        st.info("**Parent Dashboard**\n\nTrack both kids' progress, study hours, and achievements.")
+    
+    # Load data for both kids
+    try:
+        # Get all students from database
+        conn = db.get_db_connection()
+        cur = conn.cursor()
+        
+        # Get all unique students
+        cur.execute("SELECT DISTINCT name, grade FROM students ORDER BY grade")
+        students = cur.fetchall()
+        
+        if not students:
+            st.info("👶 No student data yet. Kids need to log in and start studying first!")
+            conn.close()
+            st.stop()
+        
+        # Overview metrics
+        st.header("📈 Overall Progress")
+        cols = st.columns(len(students))
+        
+        for idx, (student_name, student_grade) in enumerate(students):
+            with cols[idx]:
+                st.subheader(f"{student_name}")
+                st.caption(f"{student_grade}")
+                
+                # Get stats
+                student_data = db.get_or_create_student(student_name, student_grade)
+                completed_topics = db.get_completed_topics(student_name, student_grade)
+                total_hours = db.get_total_study_hours(student_name, student_grade)
+                
+                st.metric("📚 Topics Completed", len(completed_topics))
+                st.metric("⏱️ Total Hours", f"{total_hours:.1f}")
+                st.metric("🔥 Streak", f"{student_data.get('streak_days', 0)} days")
+        
+        st.markdown("---")
+        
+        # Detailed view - select student
+        st.header("🔍 Detailed View")
+        selected_student = st.selectbox(
+            "Select student to view details:",
+            options=[f"{name} ({grade})" for name, grade in students]
+        )
+        
+        # Parse selected student
+        selected_name = selected_student.split(" (")[0]
+        selected_grade = selected_student.split("(")[1].replace(")", "")
+        
+        # Get detailed data
+        student_data = db.get_or_create_student(selected_name, selected_grade)
+        completed_topics_db = db.get_completed_topics(selected_name, selected_grade)
+        completed_topics_list = [t['topic'] for t in completed_topics_db]
+        total_hours = db.get_total_study_hours(selected_name, selected_grade)
+        
+        # Create tabs for detailed view
+        dtab1, dtab2, dtab3, dtab4 = st.tabs(["📊 Progress", "📅 Weekly Plan", "🏆 Achievements", "📝 Recent Activity"])
+        
+        with dtab1:
+            st.subheader(f"📊 {selected_name}'s Progress")
+            
+            # Progress by subject
+            col1, col2, col3 = st.columns(3)
+            
+            subjects = ["Math", "Science", "English"]
+            subject_counts = {subj: 0 for subj in subjects}
+            
+            for topic_data in completed_topics_db:
+                topic = topic_data['topic']
+                for subj in subjects:
+                    if subj in topic_data.get('subject', ''):
+                        subject_counts[subj] += 1
+            
+            with col1:
+                st.metric("🔢 Math Topics", subject_counts["Math"])
+            with col2:
+                st.metric("🔬 Science Topics", subject_counts["Science"])
+            with col3:
+                st.metric("📖 English Topics", subject_counts["English"])
+            
+            st.markdown("---")
+            
+            # Completed topics list
+            st.subheader("✅ Completed Topics")
+            if completed_topics_list:
+                for i, topic_data in enumerate(completed_topics_db[:20], 1):
+                    st.markdown(f"{i}. **{topic_data['topic']}** ({topic_data['subject']})")
+                if len(completed_topics_db) > 20:
+                    st.caption(f"... and {len(completed_topics_db) - 20} more")
+            else:
+                st.info("No topics completed yet.")
+        
+        with dtab2:
+            st.subheader(f"📅 {selected_name}'s Weekly Plan")
+            
+            # Show this week's plan
+            import datetime
+            today = datetime.date.today()
+            week_start = today - datetime.timedelta(days=today.weekday())
+            
+            for i in range(7):
+                day = week_start + datetime.timedelta(days=i)
+                day_name = day.strftime("%A")
+                day_str = day.strftime("%Y-%m-%d")
+                
+                with st.expander(f"{'📍' if day == today else '📅'} {day_name} ({day.strftime('%b %d')})"):
+                    plans = db.get_weekly_plan(selected_name, selected_grade, day_str)
+                    if plans:
+                        for plan in plans:
+                            st.markdown(f"**{plan['subject']}:** {plan['topic']} - {plan['duration']} min")
+                    else:
+                        st.caption("No plan for this day")
+        
+        with dtab3:
+            st.subheader(f"🏆 {selected_name}'s Achievements")
+            
+            # Calculate badges
+            badges_earned = []
+            
+            if total_hours >= 1:
+                badges_earned.append("🎯 First Hour - Logged 1 hour")
+            if total_hours >= 10:
+                badges_earned.append("💪 Dedicated Learner - 10+ hours")
+            if total_hours >= 25:
+                badges_earned.append("🔥 Study Master - 25+ hours")
+            if total_hours >= 50:
+                badges_earned.append("👑 Olympiad Champion - 50+ hours")
+            
+            if len(completed_topics_list) >= 5:
+                badges_earned.append("📚 Topic Explorer - 5 topics")
+            if len(completed_topics_list) >= 15:
+                badges_earned.append("🌟 Knowledge Builder - 15 topics")
+            if len(completed_topics_list) >= 30:
+                badges_earned.append("🎓 Expert Student - 30 topics")
+            
+            if student_data.get('streak_days', 0) >= 3:
+                badges_earned.append("🔥 3-Day Streak")
+            if student_data.get('streak_days', 0) >= 7:
+                badges_earned.append("⚡ Week Warrior - 7 days")
+            if student_data.get('streak_days', 0) >= 14:
+                badges_earned.append("💎 Two Week Champion")
+            
+            if badges_earned:
+                for badge in badges_earned:
+                    st.success(badge)
+            else:
+                st.info("No badges earned yet. Keep studying!")
+        
+        with dtab4:
+            st.subheader(f"📝 {selected_name}'s Recent Activity")
+            
+            # Get recent study sessions
+            cur.execute("""
+                SELECT date, subject, duration_hours, notes 
+                FROM study_sessions 
+                WHERE student_name = %s AND grade = %s 
+                ORDER BY date DESC 
+                LIMIT 10
+            """, (selected_name, selected_grade))
+            sessions = cur.fetchall()
+            
+            if sessions:
+                for session in sessions:
+                    date, subject, duration, notes = session
+                    st.markdown(f"**{date}** - {subject} ({duration:.1f}h)")
+                    if notes:
+                        st.caption(f"📝 {notes}")
+                    st.markdown("---")
+            else:
+                st.info("No study sessions logged yet.")
+        
+        conn.close()
+        
+    except Exception as e:
+        st.error(f"Error loading dashboard: {e}")
+    
+    st.stop()
+
+# STUDENT VIEW - load their data
 name = st.session_state.current_user['name']
 grade = st.session_state.current_user['grade']
 
