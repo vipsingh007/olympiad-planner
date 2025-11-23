@@ -151,6 +151,29 @@ def add_study_session(name, grade, subject, duration, topics=None):
         if conn:
             conn.close()
 
+def get_recent_study_sessions(name, grade, limit=10):
+    """Get recent study sessions for a student"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            """SELECT created_at, subject, duration_minutes, topics 
+               FROM study_sessions 
+               WHERE student_name = %s AND grade = %s 
+               ORDER BY created_at DESC 
+               LIMIT %s""",
+            (name, grade, limit)
+        )
+        sessions = cur.fetchall()
+        cur.close()
+        
+        return [dict(s) for s in sessions]
+    finally:
+        if conn:
+            conn.close()
+
 def get_total_study_hours(name, grade):
     """Calculate total study hours from sessions"""
     conn = None
@@ -314,6 +337,98 @@ def get_quiz_stats(name, grade):
         cur.close()
         
         return dict(stats) if stats else {"total_quizzes": 0, "avg_percentage": 0}
+    finally:
+        if conn:
+            conn.close()
+
+# Bulk loading for parent dashboard (optimized)
+def get_student_dashboard_data(student_list):
+    """
+    Load all dashboard data for multiple students in one connection.
+    Much faster than calling individual functions.
+    
+    Args:
+        student_list: List of tuples [(name, grade), ...]
+    
+    Returns:
+        Dictionary with all data for each student
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Ensure quiz_results table exists
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS quiz_results (
+                id SERIAL PRIMARY KEY,
+                student_name VARCHAR(100),
+                grade VARCHAR(20),
+                subject VARCHAR(50),
+                num_questions INTEGER,
+                score INTEGER,
+                topics TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        
+        result = {}
+        
+        for name, grade in student_list:
+            # Get/create student
+            cur.execute(
+                "SELECT * FROM students WHERE student_name = %s AND grade = %s",
+                (name, grade)
+            )
+            student_data = cur.fetchone()
+            
+            if not student_data:
+                cur.execute(
+                    "INSERT INTO students (student_name, grade) VALUES (%s, %s) RETURNING *",
+                    (name, grade)
+                )
+                student_data = cur.fetchone()
+                conn.commit()
+            
+            # Get completed topics
+            cur.execute(
+                "SELECT topic, subject FROM completed_topics WHERE student_name = %s AND grade = %s",
+                (name, grade)
+            )
+            completed_topics = cur.fetchall()
+            
+            # Get total study hours (convert minutes to hours)
+            cur.execute(
+                "SELECT COALESCE(SUM(duration_minutes), 0) as total FROM study_sessions WHERE student_name = %s AND grade = %s",
+                (name, grade)
+            )
+            hours_result = cur.fetchone()
+            total_hours = (hours_result['total'] / 60.0) if hours_result else 0
+            
+            # Get quiz stats
+            cur.execute(
+                """SELECT 
+                    COUNT(*) as total_quizzes,
+                    AVG(CAST(score AS FLOAT) / CAST(num_questions AS FLOAT) * 100) as avg_percentage
+                   FROM quiz_results 
+                   WHERE student_name = %s AND grade = %s""",
+                (name, grade)
+            )
+            quiz_stats_result = cur.fetchone()
+            quiz_stats = dict(quiz_stats_result) if quiz_stats_result else {"total_quizzes": 0, "avg_percentage": 0}
+            
+            # Store all data for this student
+            result[f"{name}_{grade}"] = {
+                'student_data': dict(student_data) if student_data else None,
+                'completed_topics': [dict(t) for t in completed_topics],
+                'total_hours': total_hours,
+                'quiz_stats': quiz_stats
+            }
+        
+        cur.close()
+        return result
+        
     finally:
         if conn:
             conn.close()

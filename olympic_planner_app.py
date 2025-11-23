@@ -212,47 +212,24 @@ if user_type == "parent":
     if not st.session_state.parent_data_loaded:
         with st.spinner("Loading dashboard data..."):
             try:
-                # Get data for configured students
-                conn = db.get_db_connection()
-                cur = conn.cursor()
+                # Prepare student list
+                students = [(kid['name'], kid['grade']) for kid in st.session_state.parent_kids]
                 
-                students = []
-                dashboard_cache = {}
+                # Bulk load all data in ONE database call (much faster!)
+                dashboard_cache = db.get_student_dashboard_data(students)
                 
-                for kid in st.session_state.parent_kids:
-                    # Check if this student exists in database
-                    cur.execute(
-                        "SELECT student_name, grade FROM students WHERE student_name = %s AND grade = %s",
-                        (kid['name'], kid['grade'])
-                    )
-                    result = cur.fetchone()
-                    if result:
-                        student_name = result['student_name']
-                        student_grade = result['grade']
-                        students.append((student_name, student_grade))
-                        
-                        # Load all data for this student at once
-                        student_data = db.get_or_create_student(student_name, student_grade)
-                        completed_topics = db.get_completed_topics(student_name, student_grade)
-                        total_hours = db.get_total_study_hours(student_name, student_grade)
-                        quiz_stats = db.get_quiz_stats(student_name, student_grade)
-                        
-                        dashboard_cache[f"{student_name}_{student_grade}"] = {
-                            'student_data': student_data,
-                            'completed_topics': completed_topics,
-                            'total_hours': total_hours,
-                            'quiz_stats': quiz_stats
-                        }
+                # Filter out students that don't exist in DB
+                existing_students = [(name, grade) for name, grade in students 
+                                    if f"{name}_{grade}" in dashboard_cache 
+                                    and dashboard_cache[f"{name}_{grade}"]['student_data'] is not None]
                 
-                conn.close()
-                
-                if not students:
+                if not existing_students:
                     st.warning("⚠️ None of your configured kids have logged in yet!")
                     st.info("Make sure they log in at least once to create their profile.")
                     st.stop()
                 
                 st.session_state.parent_dashboard_data = dashboard_cache
-                st.session_state.parent_dashboard_students = students
+                st.session_state.parent_dashboard_students = existing_students
                 st.session_state.parent_data_loaded = True
                 
             except Exception as e:
@@ -266,10 +243,7 @@ if user_type == "parent":
     students = st.session_state.parent_dashboard_students
     dashboard_cache = st.session_state.parent_dashboard_data
     
-    # Load data for configured kids only
     try:
-        conn = db.get_db_connection()
-        cur = conn.cursor()
         
         # Overview metrics
         st.header("📈 Overall Progress")
@@ -495,14 +469,7 @@ if user_type == "parent":
             st.subheader(f"📝 {selected_name}'s Recent Activity")
             
             # Get recent study sessions
-            cur.execute("""
-                SELECT created_at, subject, duration_minutes, topics 
-                FROM study_sessions 
-                WHERE student_name = %s AND grade = %s 
-                ORDER BY created_at DESC 
-                LIMIT 10
-            """, (selected_name, selected_grade))
-            sessions = cur.fetchall()
+            sessions = db.get_recent_study_sessions(selected_name, selected_grade, limit=10)
             
             if sessions:
                 for session in sessions:
@@ -521,16 +488,12 @@ if user_type == "parent":
             else:
                 st.info("No study sessions logged yet.")
         
-        conn.close()
-        
     except Exception as e:
         import traceback
         st.error(f"Error loading dashboard: {str(e)}")
         st.error(f"Error type: {type(e).__name__}")
         with st.expander("Debug info"):
             st.code(traceback.format_exc())
-        if conn:
-            conn.close()
     
     st.stop()
 
