@@ -156,40 +156,91 @@ if user_type == "parent":
             st.rerun()
         
         st.markdown("---")
-        st.info("**Parent Dashboard**\n\nTrack both kids' progress, study hours, and achievements.")
+        st.markdown("### 👥 My Kids")
+        
+        # Initialize parent config in session state
+        if 'parent_kids' not in st.session_state:
+            st.session_state.parent_kids = []
+        
+        # Add/Edit kids
+        with st.expander("➕ Configure Kids", expanded=len(st.session_state.parent_kids) == 0):
+            kid_name = st.text_input("Student Name (as they login):", key="add_kid_name")
+            kid_grade = st.selectbox("Grade:", ["Grade 3", "Grade 5"], key="add_kid_grade")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("➕ Add", use_container_width=True):
+                    if kid_name:
+                        st.session_state.parent_kids.append({"name": kid_name, "grade": kid_grade})
+                        st.success(f"Added {kid_name}!")
+                        st.rerun()
+            with col2:
+                if st.button("🗑️ Clear All", use_container_width=True):
+                    st.session_state.parent_kids = []
+                    st.rerun()
+        
+        # Show configured kids
+        if st.session_state.parent_kids:
+            st.markdown("**Monitoring:**")
+            for kid in st.session_state.parent_kids:
+                st.markdown(f"- {kid['name']} ({kid['grade']})")
+        else:
+            st.warning("⚠️ Add your kids' names to see their data!")
+        
+        st.markdown("---")
+        st.info("**Tip:** Enter the exact name your kids use when they login.")
     
-    # Load data for both kids
+    # Check if kids are configured
+    if not st.session_state.parent_kids:
+        st.info("👆 Please configure your kids' names in the sidebar to see their dashboard!")
+        st.stop()
+    
+    # Load data for configured kids only
     try:
-        # Get all students from database
+        # Get data for configured students
         conn = db.get_db_connection()
         cur = conn.cursor()
         
-        # Get all unique students
-        cur.execute("SELECT DISTINCT student_name, grade FROM students ORDER BY grade")
-        students = cur.fetchall()
+        students = []
+        for kid in st.session_state.parent_kids:
+            # Check if this student exists in database
+            cur.execute(
+                "SELECT student_name, grade FROM students WHERE student_name = %s AND grade = %s",
+                (kid['name'], kid['grade'])
+            )
+            result = cur.fetchone()
+            if result:
+                students.append((result[0], result[1]))
         
         if not students:
-            st.info("👶 No student data yet. Kids need to log in and start studying first!")
+            st.warning("⚠️ None of your configured kids have logged in yet!")
+            st.info("Make sure they log in at least once to create their profile.")
             conn.close()
             st.stop()
         
         # Overview metrics
         st.header("📈 Overall Progress")
-        cols = st.columns(len(students))
+        
+        # Create columns based on number of students (max 3 per row)
+        num_students = len(students)
+        cols_per_row = min(num_students, 3)
         
         for idx, (student_name, student_grade) in enumerate(students):
-            with cols[idx]:
-                st.subheader(f"{student_name}")
-                st.caption(f"{student_grade}")
+            if idx % cols_per_row == 0:
+                cols = st.columns(cols_per_row)
+            
+            with cols[idx % cols_per_row]:
+                st.markdown(f"### {student_name}")
+                st.caption(f"📚 {student_grade}")
                 
                 # Get stats
                 student_data = db.get_or_create_student(student_name, student_grade)
                 completed_topics = db.get_completed_topics(student_name, student_grade)
                 total_hours = db.get_total_study_hours(student_name, student_grade)
                 
-                st.metric("📚 Topics Completed", len(completed_topics))
-                st.metric("⏱️ Total Hours", f"{total_hours:.1f}")
-                st.metric("🔥 Streak", f"{student_data.get('streak_days', 0)} days")
+                st.metric("Topics Done", len(completed_topics))
+                st.metric("Study Hours", f"{total_hours:.1f}")
+                st.metric("Streak 🔥", f"{student_data.get('streak_days', 0)} days")
         
         st.markdown("---")
         
