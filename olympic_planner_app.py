@@ -297,6 +297,156 @@ if user_type == "parent":
         
         st.markdown("---")
         
+        # AI Insights Section
+        st.header("💡 Smart Insights")
+        st.caption("Data-driven observations about your kids' study patterns")
+        
+        # Generate insights for each student
+        for student_name, student_grade in students:
+            cache_key = f"{student_name}_{student_grade}"
+            
+            with st.expander(f"🔍 Insights for {student_name}", expanded=len(students) == 1):
+                try:
+                    insights_data = db.get_student_insights(student_name, student_grade)
+                    
+                    # Analyze and generate insights
+                    insight_messages = []
+                    
+                    # Check subject balance (last 14 days)
+                    recent_subjects = insights_data.get('recent_by_subject', {})
+                    all_subjects = ['Math', 'Science', 'English']
+                    
+                    for subject in all_subjects:
+                        if subject not in recent_subjects:
+                            insight_messages.append({
+                                'type': 'warning',
+                                'icon': '⚠️',
+                                'message': f"**No {subject} sessions** logged in the last 2 weeks. Consider adding {subject} study time."
+                            })
+                    
+                    # Check for balanced study
+                    if len(recent_subjects) >= 2:
+                        subjects_list = list(recent_subjects.keys())
+                        time_variance = max([s['total_minutes'] for s in recent_subjects.values()]) - min([s['total_minutes'] for s in recent_subjects.values()])
+                        
+                        if time_variance > 200:  # More than 3 hours difference
+                            insight_messages.append({
+                                'type': 'info',
+                                'icon': '⚖️',
+                                'message': f"**Study time imbalance detected.** {student_name} is focusing heavily on some subjects. Try to balance across Math, Science, and English."
+                            })
+                        elif len(recent_subjects) == 3:
+                            insight_messages.append({
+                                'type': 'success',
+                                'icon': '✨',
+                                'message': f"**Great balance!** {student_name} is studying all three subjects regularly."
+                            })
+                    
+                    # Check quiz performance trend
+                    quiz_results = insights_data.get('quiz_results', [])
+                    if len(quiz_results) >= 3:
+                        recent_3 = quiz_results[:3]
+                        older_3 = quiz_results[3:6] if len(quiz_results) >= 6 else quiz_results[3:]
+                        
+                        if older_3:
+                            recent_avg = sum([q['score'] / q['num_questions'] * 100 for q in recent_3]) / len(recent_3)
+                            older_avg = sum([q['score'] / q['num_questions'] * 100 for q in older_3]) / len(older_3)
+                            
+                            if recent_avg > older_avg + 10:
+                                insight_messages.append({
+                                    'type': 'success',
+                                    'icon': '📈',
+                                    'message': f"**Quiz performance improving!** Recent average: {recent_avg:.0f}% (up from {older_avg:.0f}%). Keep up the good work!"
+                                })
+                            elif recent_avg < older_avg - 10:
+                                insight_messages.append({
+                                    'type': 'warning',
+                                    'icon': '📉',
+                                    'message': f"**Quiz scores declining.** Recent average: {recent_avg:.0f}% (down from {older_avg:.0f}%). May need more review time."
+                                })
+                            else:
+                                insight_messages.append({
+                                    'type': 'info',
+                                    'icon': '📊',
+                                    'message': f"**Quiz performance steady.** Maintaining {recent_avg:.0f}% average."
+                                })
+                    
+                    # Check study consistency (last 7 days)
+                    all_sessions = insights_data.get('all_sessions', [])
+                    if all_sessions:
+                        import datetime
+                        now = datetime.datetime.now()
+                        last_7_days = [s for s in all_sessions if (now - s['created_at']).days <= 7]
+                        
+                        if len(last_7_days) >= 5:
+                            insight_messages.append({
+                                'type': 'success',
+                                'icon': '🔥',
+                                'message': f"**Excellent consistency!** {len(last_7_days)} study sessions in the last week. {student_name} is building a strong habit!"
+                            })
+                        elif len(last_7_days) >= 3:
+                            insight_messages.append({
+                                'type': 'info',
+                                'icon': '👍',
+                                'message': f"**Good progress!** {len(last_7_days)} sessions this week. Try to aim for 5+ sessions per week."
+                            })
+                        elif len(last_7_days) >= 1:
+                            insight_messages.append({
+                                'type': 'warning',
+                                'icon': '⏰',
+                                'message': f"**Low activity.** Only {len(last_7_days)} session(s) this week. Encourage more regular study time."
+                            })
+                        
+                        # Check if there's been no activity recently
+                        last_session_date = insights_data.get('last_session_date')
+                        if last_session_date:
+                            days_since = (now - last_session_date).days
+                            if days_since > 7:
+                                insight_messages.append({
+                                    'type': 'warning',
+                                    'icon': '🚨',
+                                    'message': f"**Inactive for {days_since} days!** Last study session was {last_session_date.strftime('%b %d')}. Time to restart the habit!"
+                                })
+                            elif days_since > 3:
+                                insight_messages.append({
+                                    'type': 'info',
+                                    'icon': '📅',
+                                    'message': f"**{days_since} days** since last session. Regular practice is key to retention!"
+                                })
+                    
+                    # Check study duration patterns
+                    if all_sessions:
+                        avg_duration = sum([s['duration_minutes'] for s in all_sessions]) / len(all_sessions)
+                        if avg_duration < 20:
+                            insight_messages.append({
+                                'type': 'info',
+                                'icon': '⏱️',
+                                'message': f"**Short sessions detected.** Average: {avg_duration:.0f} min. Consider 30-45 min sessions for better focus."
+                            })
+                        elif avg_duration > 90:
+                            insight_messages.append({
+                                'type': 'info',
+                                'icon': '🧠',
+                                'message': f"**Very long sessions.** Average: {avg_duration:.0f} min. Remember to take breaks to maintain focus!"
+                            })
+                    
+                    # Display insights
+                    if insight_messages:
+                        for insight in insight_messages:
+                            if insight['type'] == 'success':
+                                st.success(f"{insight['icon']} {insight['message']}")
+                            elif insight['type'] == 'warning':
+                                st.warning(f"{insight['icon']} {insight['message']}")
+                            else:
+                                st.info(f"{insight['icon']} {insight['message']}")
+                    else:
+                        st.info("🎯 Not enough data yet. Insights will appear as your child uses the app more!")
+                
+                except Exception as e:
+                    st.error(f"Error generating insights: {e}")
+        
+        st.markdown("---")
+        
         # Detailed view - select student
         st.header("🔍 Detailed View")
         selected_student = st.selectbox(

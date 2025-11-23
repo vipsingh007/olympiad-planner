@@ -174,6 +174,69 @@ def get_recent_study_sessions(name, grade, limit=10):
         if conn:
             conn.close()
 
+def get_student_insights(name, grade):
+    """
+    Generate insights about student's study patterns
+    Returns analysis of sessions, quiz performance, and subject balance
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        insights = {}
+        
+        # Get all sessions for last 30 days
+        cur.execute("""
+            SELECT subject, duration_minutes, created_at
+            FROM study_sessions 
+            WHERE student_name = %s AND grade = %s 
+            AND created_at >= NOW() - INTERVAL '30 days'
+            ORDER BY created_at DESC
+        """, (name, grade))
+        all_sessions = cur.fetchall()
+        
+        # Get sessions by subject for last 14 days
+        cur.execute("""
+            SELECT subject, COUNT(*) as session_count, SUM(duration_minutes) as total_minutes
+            FROM study_sessions 
+            WHERE student_name = %s AND grade = %s 
+            AND created_at >= NOW() - INTERVAL '14 days'
+            GROUP BY subject
+        """, (name, grade))
+        recent_by_subject = cur.fetchall()
+        
+        # Get quiz performance trend (last 10 quizzes)
+        cur.execute("""
+            SELECT score, num_questions, subject, created_at
+            FROM quiz_results 
+            WHERE student_name = %s AND grade = %s 
+            ORDER BY created_at DESC 
+            LIMIT 10
+        """, (name, grade))
+        quiz_results = cur.fetchall()
+        
+        # Get last session date
+        cur.execute("""
+            SELECT MAX(created_at) as last_session
+            FROM study_sessions 
+            WHERE student_name = %s AND grade = %s
+        """, (name, grade))
+        last_session_result = cur.fetchone()
+        
+        cur.close()
+        
+        insights['all_sessions'] = [dict(s) for s in all_sessions]
+        insights['recent_by_subject'] = {s['subject']: dict(s) for s in recent_by_subject}
+        insights['quiz_results'] = [dict(q) for q in quiz_results] if quiz_results else []
+        insights['last_session_date'] = last_session_result['last_session'] if last_session_result else None
+        
+        return insights
+        
+    finally:
+        if conn:
+            conn.close()
+
 def get_total_study_hours(name, grade):
     """Calculate total study hours from sessions"""
     conn = None
