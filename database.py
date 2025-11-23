@@ -207,3 +207,83 @@ def get_weekly_plan(name, grade, week_key):
     finally:
         if conn:
             conn.close()
+
+# Quiz operations
+def save_quiz_result(name, grade, subject, num_questions, score, topics):
+    """Save quiz result to database"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Create table if not exists
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS quiz_results (
+                id SERIAL PRIMARY KEY,
+                student_name VARCHAR(100),
+                grade VARCHAR(20),
+                subject VARCHAR(50),
+                num_questions INTEGER,
+                score INTEGER,
+                topics TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Insert quiz result
+        cur.execute(
+            """INSERT INTO quiz_results (student_name, grade, subject, num_questions, score, topics)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (name, grade, subject, num_questions, score, topics)
+        )
+        conn.commit()
+        cur.close()
+    finally:
+        if conn:
+            conn.close()
+
+def get_quiz_results(name, grade, limit=10):
+    """Get recent quiz results for a student"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            """SELECT subject, num_questions, score, topics, created_at 
+               FROM quiz_results 
+               WHERE student_name = %s AND grade = %s 
+               ORDER BY created_at DESC 
+               LIMIT %s""",
+            (name, grade, limit)
+        )
+        results = cur.fetchall()
+        cur.close()
+        
+        return [dict(r) for r in results]
+    finally:
+        if conn:
+            conn.close()
+
+def get_quiz_stats(name, grade):
+    """Get quiz statistics for a student"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            """SELECT 
+                COUNT(*) as total_quizzes,
+                AVG(CAST(score AS FLOAT) / CAST(num_questions AS FLOAT) * 100) as avg_percentage
+               FROM quiz_results 
+               WHERE student_name = %s AND grade = %s""",
+            (name, grade)
+        )
+        stats = cur.fetchone()
+        cur.close()
+        
+        return dict(stats) if stats else {"total_quizzes": 0, "avg_percentage": 0}
+    finally:
+        if conn:
+            conn.close()

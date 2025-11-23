@@ -150,10 +150,18 @@ if user_type == "parent":
     # Logout button in sidebar
     with st.sidebar:
         st.markdown("### 👋 Hi, Parent!")
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.current_user = None
-            st.rerun()
+        
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🔄 Refresh", use_container_width=True):
+                st.session_state.parent_data_loaded = False
+                st.rerun()
+        with col_btn2:
+            if st.button("🚪 Logout", use_container_width=True):
+                st.session_state.authenticated = False
+                st.session_state.current_user = None
+                st.session_state.parent_data_loaded = False
+                st.rerun()
         
         st.markdown("---")
         st.markdown("### 👥 My Kids")
@@ -195,67 +203,123 @@ if user_type == "parent":
         st.info("👆 Please configure your kids' names in the sidebar to see their dashboard!")
         st.stop()
     
+    # Cache parent dashboard data
+    if 'parent_dashboard_data' not in st.session_state:
+        st.session_state.parent_dashboard_data = {}
+        st.session_state.parent_data_loaded = False
+    
+    # Load/refresh data
+    if not st.session_state.parent_data_loaded:
+        with st.spinner("Loading dashboard data..."):
+            try:
+                # Get data for configured students
+                conn = db.get_db_connection()
+                cur = conn.cursor()
+                
+                students = []
+                dashboard_cache = {}
+                
+                for kid in st.session_state.parent_kids:
+                    # Check if this student exists in database
+                    cur.execute(
+                        "SELECT student_name, grade FROM students WHERE student_name = %s AND grade = %s",
+                        (kid['name'], kid['grade'])
+                    )
+                    result = cur.fetchone()
+                    if result:
+                        student_name = result['student_name']
+                        student_grade = result['grade']
+                        students.append((student_name, student_grade))
+                        
+                        # Load all data for this student at once
+                        student_data = db.get_or_create_student(student_name, student_grade)
+                        completed_topics = db.get_completed_topics(student_name, student_grade)
+                        total_hours = db.get_total_study_hours(student_name, student_grade)
+                        quiz_stats = db.get_quiz_stats(student_name, student_grade)
+                        
+                        dashboard_cache[f"{student_name}_{student_grade}"] = {
+                            'student_data': student_data,
+                            'completed_topics': completed_topics,
+                            'total_hours': total_hours,
+                            'quiz_stats': quiz_stats
+                        }
+                
+                conn.close()
+                
+                if not students:
+                    st.warning("⚠️ None of your configured kids have logged in yet!")
+                    st.info("Make sure they log in at least once to create their profile.")
+                    st.stop()
+                
+                st.session_state.parent_dashboard_data = dashboard_cache
+                st.session_state.parent_dashboard_students = students
+                st.session_state.parent_data_loaded = True
+                
+            except Exception as e:
+                import traceback
+                st.error(f"Error loading dashboard: {str(e)}")
+                with st.expander("Debug info"):
+                    st.code(traceback.format_exc())
+                st.stop()
+    
+    # Use cached data
+    students = st.session_state.parent_dashboard_students
+    dashboard_cache = st.session_state.parent_dashboard_data
+    
     # Load data for configured kids only
     try:
-        # Get data for configured students
         conn = db.get_db_connection()
         cur = conn.cursor()
-        
-        students = []
-        for kid in st.session_state.parent_kids:
-            # Check if this student exists in database
-            cur.execute(
-                "SELECT student_name, grade FROM students WHERE student_name = %s AND grade = %s",
-                (kid['name'], kid['grade'])
-            )
-            result = cur.fetchone()
-            if result:
-                students.append((result['student_name'], result['grade']))
-        
-        if not students:
-            st.warning("⚠️ None of your configured kids have logged in yet!")
-            st.info("Make sure they log in at least once to create their profile.")
-            conn.close()
-            st.stop()
         
         # Overview metrics
         st.header("📈 Overall Progress")
         
-        # Display student cards
+        # Display student cards using cached data
         num_students = len(students)
         if num_students == 1:
             # Single student - full width
-            st.markdown(f"### {students[0][0]}")
-            st.caption(f"📚 {students[0][1]}")
+            student_name, student_grade = students[0]
+            cache_key = f"{student_name}_{student_grade}"
+            cached = dashboard_cache[cache_key]
             
-            student_data = db.get_or_create_student(students[0][0], students[0][1])
-            completed_topics = db.get_completed_topics(students[0][0], students[0][1])
-            total_hours = db.get_total_study_hours(students[0][0], students[0][1])
+            st.markdown(f"### {student_name}")
+            st.caption(f"📚 {student_grade}")
             
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Topics Done", len(completed_topics))
+                st.metric("Topics Done", len(cached['completed_topics']))
             with col2:
-                st.metric("Study Hours", f"{total_hours:.1f}")
+                st.metric("Study Hours", f"{cached['total_hours']:.1f}")
             with col3:
-                st.metric("Streak 🔥", f"{student_data.get('streak_days', 0)} days")
+                st.metric("Streak", f"{cached['student_data'].get('streak_days', 0)} 🔥")
+            with col4:
+                quiz_stats = cached['quiz_stats']
+                if quiz_stats['total_quizzes'] > 0:
+                    st.metric("Quizzes", f"{quiz_stats['total_quizzes']} ({quiz_stats['avg_percentage']:.0f}%)")
+                else:
+                    st.metric("Quizzes", "0")
         else:
             # Multiple students - side by side
             cols = st.columns(num_students)
             
             for idx, (student_name, student_grade) in enumerate(students):
+                cache_key = f"{student_name}_{student_grade}"
+                cached = dashboard_cache[cache_key]
+                
                 with cols[idx]:
                     st.markdown(f"### {student_name}")
                     st.caption(f"📚 {student_grade}")
                     
-                    # Get stats
-                    student_data = db.get_or_create_student(student_name, student_grade)
-                    completed_topics = db.get_completed_topics(student_name, student_grade)
-                    total_hours = db.get_total_study_hours(student_name, student_grade)
+                    st.metric("Topics", len(cached['completed_topics']))
+                    st.metric("Hours", f"{cached['total_hours']:.1f}")
+                    st.metric("Streak", f"{cached['student_data'].get('streak_days', 0)} 🔥")
                     
-                    st.metric("Topics", len(completed_topics))
-                    st.metric("Hours", f"{total_hours:.1f}")
-                    st.metric("Streak", f"{student_data.get('streak_days', 0)} 🔥")
+                    quiz_stats = cached['quiz_stats']
+                    if quiz_stats['total_quizzes'] > 0:
+                        st.metric("Quizzes", f"{quiz_stats['total_quizzes']}")
+                        st.caption(f"Avg: {quiz_stats['avg_percentage']:.0f}%")
+                    else:
+                        st.metric("Quizzes", "0")
         
         st.markdown("---")
         
@@ -277,7 +341,7 @@ if user_type == "parent":
         total_hours = db.get_total_study_hours(selected_name, selected_grade)
         
         # Create tabs for detailed view
-        dtab1, dtab2, dtab3, dtab4 = st.tabs(["📊 Progress", "📅 Weekly Plan", "🏆 Achievements", "📝 Recent Activity"])
+        dtab1, dtab2, dtab3, dtab4, dtab5 = st.tabs(["📊 Progress", "📅 Weekly Plan", "🎯 Quiz Scores", "🏆 Achievements", "📝 Recent Activity"])
         
         with dtab1:
             st.subheader(f"📊 {selected_name}'s Progress")
@@ -335,6 +399,64 @@ if user_type == "parent":
                         st.caption("No plan for this day")
         
         with dtab3:
+            st.subheader(f"🎯 {selected_name}'s Quiz Scores")
+            
+            # Get quiz results
+            quiz_results = db.get_quiz_results(selected_name, selected_grade, limit=20)
+            quiz_stats = db.get_quiz_stats(selected_name, selected_grade)
+            
+            if quiz_stats['total_quizzes'] > 0:
+                # Summary stats
+                col_q1, col_q2, col_q3 = st.columns(3)
+                with col_q1:
+                    st.metric("Total Quizzes", quiz_stats['total_quizzes'])
+                with col_q2:
+                    st.metric("Average Score", f"{quiz_stats['avg_percentage']:.1f}%")
+                with col_q3:
+                    if quiz_stats['avg_percentage'] >= 80:
+                        st.metric("Performance", "⭐ Excellent")
+                    elif quiz_stats['avg_percentage'] >= 60:
+                        st.metric("Performance", "👍 Good")
+                    else:
+                        st.metric("Performance", "📈 Improving")
+                
+                st.markdown("---")
+                st.markdown("#### Recent Quizzes")
+                
+                # Show recent quiz results
+                for quiz in quiz_results:
+                    created_at = quiz['created_at']
+                    date_str = created_at.strftime("%b %d, %Y") if hasattr(created_at, 'strftime') else str(created_at)
+                    
+                    score = quiz['score']
+                    total = quiz['num_questions']
+                    percentage = (score / total * 100) if total > 0 else 0
+                    
+                    # Color based on performance
+                    if percentage >= 80:
+                        emoji = "⭐"
+                        color = "green"
+                    elif percentage >= 60:
+                        emoji = "👍"
+                        color = "blue"
+                    else:
+                        emoji = "📈"
+                        color = "orange"
+                    
+                    with st.expander(f"{emoji} {quiz['subject']} - {score}/{total} ({percentage:.0f}%) - {date_str}"):
+                        st.markdown(f"**Topics:** {quiz['topics']}")
+                        st.progress(percentage / 100)
+                        
+                        if percentage >= 80:
+                            st.success("Excellent work! 🎉")
+                        elif percentage >= 60:
+                            st.info("Good job! Keep practicing! 📚")
+                        else:
+                            st.warning("Keep trying! Review these topics again. 💪")
+            else:
+                st.info("No quizzes taken yet. Take a quiz in the Quiz tab!")
+        
+        with dtab4:
             st.subheader(f"🏆 {selected_name}'s Achievements")
             
             # Calculate badges
@@ -369,7 +491,7 @@ if user_type == "parent":
             else:
                 st.info("No badges earned yet. Keep studying!")
         
-        with dtab4:
+        with dtab5:
             st.subheader(f"📝 {selected_name}'s Recent Activity")
             
             # Get recent study sessions
@@ -960,6 +1082,8 @@ Return ONLY valid JSON with this exact structure (no markdown, no code blocks):
                         st.session_state.quiz_answers = {}
                         st.session_state.quiz_submitted = False
                         st.session_state.quiz_score = None
+                        st.session_state.quiz_subject_selected = quiz_subject
+                        st.session_state.quiz_topics_selected = quiz_topics
                         st.success(f"✅ Generated {len(quiz_data['questions'])} questions!")
                         st.rerun()
                         
@@ -1005,6 +1129,20 @@ Return ONLY valid JSON with this exact structure (no markdown, no code blocks):
                         
                         st.session_state.quiz_score = correct
                         st.session_state.quiz_submitted = True
+                        
+                        # Save quiz result to database
+                        try:
+                            topics_str = ", ".join(st.session_state.quiz_topics_selected)
+                            db.save_quiz_result(
+                                name, grade, 
+                                st.session_state.quiz_subject_selected,
+                                len(st.session_state.quiz_questions),
+                                correct,
+                                topics_str
+                            )
+                        except Exception as e:
+                            st.warning(f"Note: Quiz result saved locally but not to database: {e}")
+                        
                         st.rerun()
                 else:
                     st.warning(f"⚠️ Please answer all {len(st.session_state.quiz_questions)} questions before submitting.")
