@@ -210,7 +210,7 @@ if user_type == "parent":
             )
             result = cur.fetchone()
             if result:
-                students.append((result[0], result[1]))
+                students.append((result['student_name'], result['grade']))
         
         if not students:
             st.warning("⚠️ None of your configured kids have logged in yet!")
@@ -221,26 +221,41 @@ if user_type == "parent":
         # Overview metrics
         st.header("📈 Overall Progress")
         
-        # Create columns based on number of students (max 3 per row)
+        # Display student cards
         num_students = len(students)
-        cols_per_row = min(num_students, 3)
-        
-        for idx, (student_name, student_grade) in enumerate(students):
-            if idx % cols_per_row == 0:
-                cols = st.columns(cols_per_row)
+        if num_students == 1:
+            # Single student - full width
+            st.markdown(f"### {students[0][0]}")
+            st.caption(f"📚 {students[0][1]}")
             
-            with cols[idx % cols_per_row]:
-                st.markdown(f"### {student_name}")
-                st.caption(f"📚 {student_grade}")
-                
-                # Get stats
-                student_data = db.get_or_create_student(student_name, student_grade)
-                completed_topics = db.get_completed_topics(student_name, student_grade)
-                total_hours = db.get_total_study_hours(student_name, student_grade)
-                
+            student_data = db.get_or_create_student(students[0][0], students[0][1])
+            completed_topics = db.get_completed_topics(students[0][0], students[0][1])
+            total_hours = db.get_total_study_hours(students[0][0], students[0][1])
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
                 st.metric("Topics Done", len(completed_topics))
+            with col2:
                 st.metric("Study Hours", f"{total_hours:.1f}")
+            with col3:
                 st.metric("Streak 🔥", f"{student_data.get('streak_days', 0)} days")
+        else:
+            # Multiple students - side by side
+            cols = st.columns(num_students)
+            
+            for idx, (student_name, student_grade) in enumerate(students):
+                with cols[idx]:
+                    st.markdown(f"### {student_name}")
+                    st.caption(f"📚 {student_grade}")
+                    
+                    # Get stats
+                    student_data = db.get_or_create_student(student_name, student_grade)
+                    completed_topics = db.get_completed_topics(student_name, student_grade)
+                    total_hours = db.get_total_study_hours(student_name, student_grade)
+                    
+                    st.metric("Topics", len(completed_topics))
+                    st.metric("Hours", f"{total_hours:.1f}")
+                    st.metric("Streak", f"{student_data.get('streak_days', 0)} 🔥")
         
         st.markdown("---")
         
@@ -380,7 +395,13 @@ if user_type == "parent":
         conn.close()
         
     except Exception as e:
-        st.error(f"Error loading dashboard: {e}")
+        import traceback
+        st.error(f"Error loading dashboard: {str(e)}")
+        st.error(f"Error type: {type(e).__name__}")
+        with st.expander("Debug info"):
+            st.code(traceback.format_exc())
+        if conn:
+            conn.close()
     
     st.stop()
 
