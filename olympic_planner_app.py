@@ -788,54 +788,113 @@ with tab2:
             if topic in completed_topics_list:
                 st.success("✅")
     
-    # Study session logger
+    # Study session timer
     st.markdown("---")
-    st.subheader("⏱️ Log Today's Study Session")
-    st.caption("After completing a study session, log it here to track your progress")
+    st.subheader("⏱️ Study Session Timer")
     
-    col_log1, col_log2, col_log3, col_log4 = st.columns([2, 2, 1.5, 1.5])
+    # Initialize session state for active session
+    if 'active_session' not in st.session_state:
+        st.session_state.active_session = None
     
-    with col_log1:
-        log_subject = st.selectbox("Subject", ["Math", "Science", "English"], key="log_subject")
-    
-    with col_log2:
-        log_topics = st.multiselect(
-            "Topics covered",
-            SYLLABUS[grade][log_subject],
-            key="log_topics_multi",
-            placeholder="What did you study?"
-        )
-    
-    with col_log3:
-        log_duration = st.number_input("Duration (min)", min_value=5, max_value=240, value=45, step=5)
-    
-    with col_log4:
-        st.write("")
-        st.write("")
-        if st.button("📝 Log Session", type="primary", use_container_width=True):
-            if not log_topics:
-                st.warning("Please select topics you studied")
-            else:
-                try:
-                    with st.spinner("Saving..."):
-                        # Add study session
-                        db.add_study_session(name, grade, log_subject, log_duration, ','.join(log_topics))
-                        
-                        # Mark topics as completed
-                        for topic in log_topics:
-                            db.mark_topic_completed(name, grade, log_subject, topic)
-                        
-                        # Update cache immediately
-                        st.session_state.total_hours += log_duration / 60.0
-                        for topic in log_topics:
-                            if topic not in st.session_state.completed_topics_list:
-                                st.session_state.completed_topics_list.append(topic)
-                    
-                    st.success(f"✅ Logged {log_duration} min of {log_subject}!")
-                    st.balloons()
+    # Check if there's an active session
+    if st.session_state.active_session is None:
+        # No active session - show start button
+        st.caption("Start a study session and track your time automatically")
+        
+        col_start1, col_start2, col_start3 = st.columns([2, 2, 1.5])
+        
+        with col_start1:
+            start_subject = st.selectbox("Subject to study", ["Math", "Science", "English"], key="start_subject")
+        
+        with col_start2:
+            start_topics = st.multiselect(
+                "Topics to cover",
+                SYLLABUS[grade][start_subject],
+                key="start_topics_multi",
+                placeholder="What will you study?"
+            )
+        
+        with col_start3:
+            st.write("")
+            st.write("")
+            if st.button("🚀 Start Session", type="primary", use_container_width=True):
+                if not start_topics:
+                    st.warning("Please select topics you'll study")
+                else:
+                    import datetime
+                    st.session_state.active_session = {
+                        'subject': start_subject,
+                        'topics': start_topics,
+                        'start_time': datetime.datetime.now(),
+                        'name': name,
+                        'grade': grade
+                    }
+                    st.success(f"✅ Session started! Study hard, {name}! 💪")
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+    
+    else:
+        # Active session - show timer and end button
+        import datetime
+        session = st.session_state.active_session
+        elapsed = datetime.datetime.now() - session['start_time']
+        elapsed_minutes = int(elapsed.total_seconds() / 60)
+        elapsed_seconds = int(elapsed.total_seconds() % 60)
+        
+        # Display current session info
+        st.success(f"📚 **Active Session:** {session['subject']}")
+        st.info(f"**Topics:** {', '.join(session['topics'])}")
+        
+        # Display timer
+        col_timer1, col_timer2 = st.columns([2, 1])
+        
+        with col_timer1:
+            st.markdown(f"### ⏱️ Time Elapsed: {elapsed_minutes:02d}:{elapsed_seconds:02d}")
+            if elapsed_minutes < 5:
+                st.caption("Keep going! Minimum 5 minutes recommended.")
+            elif elapsed_minutes >= 60:
+                st.caption("Great job! Consider taking a break soon! 🌟")
+        
+        with col_timer2:
+            st.write("")
+            if st.button("⏹️ End Session", type="primary", use_container_width=True):
+                if elapsed_minutes < 1:
+                    st.warning("Session too short! Study at least 1 minute before ending.")
+                else:
+                    try:
+                        with st.spinner("Saving session..."):
+                            # Add study session with calculated duration
+                            db.add_study_session(
+                                session['name'], 
+                                session['grade'], 
+                                session['subject'], 
+                                elapsed_minutes,
+                                ','.join(session['topics'])
+                            )
+                            
+                            # Mark topics as completed
+                            for topic in session['topics']:
+                                db.mark_topic_completed(session['name'], session['grade'], session['subject'], topic)
+                            
+                            # Update cache immediately
+                            st.session_state.total_hours += elapsed_minutes / 60.0
+                            for topic in session['topics']:
+                                if topic not in st.session_state.completed_topics_list:
+                                    st.session_state.completed_topics_list.append(topic)
+                        
+                        # Clear active session
+                        st.session_state.active_session = None
+                        
+                        st.success(f"✅ Session saved! You studied {session['subject']} for {elapsed_minutes} minutes!")
+                        st.balloons()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error saving session: {e}")
+        
+        # Refresh button to update timer
+        if st.button("🔄 Update Timer", use_container_width=True):
+            st.rerun()
+        
+        st.caption("💡 Tip: Click 'Update Timer' to refresh the elapsed time, or just click 'End Session' when done!")
     
     # Weekly summary
     st.markdown("---")
