@@ -249,6 +249,21 @@ def get_quiz_results(name, grade, limit=10):
         conn = get_db_connection()
         cur = conn.cursor()
         
+        # Ensure table exists
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS quiz_results (
+                id SERIAL PRIMARY KEY,
+                student_name VARCHAR(100),
+                grade VARCHAR(20),
+                subject VARCHAR(50),
+                num_questions INTEGER,
+                score INTEGER,
+                topics TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        
         cur.execute(
             """SELECT subject, num_questions, score, topics, created_at 
                FROM quiz_results 
@@ -271,6 +286,21 @@ def get_quiz_stats(name, grade):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        
+        # Ensure table exists
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS quiz_results (
+                id SERIAL PRIMARY KEY,
+                student_name VARCHAR(100),
+                grade VARCHAR(20),
+                subject VARCHAR(50),
+                num_questions INTEGER,
+                score INTEGER,
+                topics TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
         
         cur.execute(
             """SELECT 
