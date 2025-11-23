@@ -374,20 +374,27 @@ if user_type == "parent":
             
             # Get recent study sessions
             cur.execute("""
-                SELECT date, subject, duration_hours, notes 
+                SELECT created_at, subject, duration_minutes, topics 
                 FROM study_sessions 
                 WHERE student_name = %s AND grade = %s 
-                ORDER BY date DESC 
+                ORDER BY created_at DESC 
                 LIMIT 10
             """, (selected_name, selected_grade))
             sessions = cur.fetchall()
             
             if sessions:
                 for session in sessions:
-                    date, subject, duration, notes = session
-                    st.markdown(f"**{date}** - {subject} ({duration:.1f}h)")
-                    if notes:
-                        st.caption(f"📝 {notes}")
+                    created_at = session['created_at']
+                    subject = session['subject']
+                    duration_min = session['duration_minutes']
+                    topics = session['topics']
+                    
+                    # Format date
+                    date_str = created_at.strftime("%b %d, %Y") if hasattr(created_at, 'strftime') else str(created_at)
+                    
+                    st.markdown(f"**{date_str}** - {subject} ({duration_min} min)")
+                    if topics:
+                        st.caption(f"📝 Topics: {topics}")
                     st.markdown("---")
             else:
                 st.info("No study sessions logged yet.")
