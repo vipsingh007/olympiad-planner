@@ -165,7 +165,7 @@ if user_type == "parent":
         cur = conn.cursor()
         
         # Get all unique students
-        cur.execute("SELECT DISTINCT name, grade FROM students ORDER BY grade")
+        cur.execute("SELECT DISTINCT student_name, grade FROM students ORDER BY grade")
         students = cur.fetchall()
         
         if not students:
