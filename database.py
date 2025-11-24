@@ -906,3 +906,332 @@ def get_preset_topics_count():
     finally:
         if conn:
             conn.close()
+
+
+# ============================================
+# ONLINE GYAAN - Learning Platform Functions
+# ============================================
+
+def initialize_online_gyaan_db():
+    """Initialize database tables for Online Gyaan platform"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Users table (for all user types)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS gyaan_users (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                name VARCHAR(200) NOT NULL,
+                user_type VARCHAR(20) NOT NULL,
+                phone VARCHAR(20),
+                grade VARCHAR(20),
+                created_at TIMESTAMP DEFAULT NOW(),
+                is_active BOOLEAN DEFAULT TRUE
+            )
+        """)
+        
+        # Teachers table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS gyaan_teachers (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES gyaan_users(id),
+                subjects TEXT[],
+                bio TEXT,
+                rating DECIMAL DEFAULT 0,
+                total_classes INTEGER DEFAULT 0,
+                total_students INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Classes table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS gyaan_classes (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(300) NOT NULL,
+                description TEXT,
+                subject VARCHAR(100),
+                grade VARCHAR(50),
+                teacher_id INTEGER REFERENCES gyaan_teachers(id),
+                class_date DATE NOT NULL,
+                class_time TIME NOT NULL,
+                duration_minutes INTEGER NOT NULL,
+                max_students INTEGER DEFAULT 30,
+                price DECIMAL DEFAULT 0,
+                meeting_link TEXT,
+                status VARCHAR(20) DEFAULT 'scheduled',
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Subscriptions table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS gyaan_subscriptions (
+                id SERIAL PRIMARY KEY,
+                student_id INTEGER REFERENCES gyaan_users(id),
+                class_id INTEGER REFERENCES gyaan_classes(id),
+                subscription_date TIMESTAMP DEFAULT NOW(),
+                payment_status VARCHAR(20) DEFAULT 'pending',
+                payment_id TEXT,
+                UNIQUE(student_id, class_id)
+            )
+        """)
+        
+        # Attendance table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS gyaan_attendance (
+                id SERIAL PRIMARY KEY,
+                student_id INTEGER REFERENCES gyaan_users(id),
+                class_id INTEGER REFERENCES gyaan_classes(id),
+                attended BOOLEAN DEFAULT FALSE,
+                joined_at TIMESTAMP,
+                duration_minutes INTEGER,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Certificates table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS gyaan_certificates (
+                id SERIAL PRIMARY KEY,
+                student_id INTEGER REFERENCES gyaan_users(id),
+                class_id INTEGER REFERENCES gyaan_classes(id),
+                certificate_title TEXT,
+                issued_date DATE DEFAULT CURRENT_DATE,
+                certificate_url TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise Exception(f"Database initialization failed: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
+# User authentication
+def create_gyaan_user(email, password, name, user_type, phone=None, grade=None):
+    """Create a new user for Online Gyaan"""
+    conn = None
+    try:
+        import bcrypt
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            """INSERT INTO gyaan_users (email, password_hash, name, user_type, phone, grade)
+               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+            (email.lower(), password_hash, name, user_type, phone, grade)
+        )
+        user_id = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        
+        return user_id
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise Exception(f"Failed to create user: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
+def authenticate_gyaan_user(email, password):
+    """Authenticate user login"""
+    conn = None
+    try:
+        import bcrypt
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            "SELECT id, email, password_hash, name, user_type, phone, grade FROM gyaan_users WHERE email = %s AND is_active = TRUE",
+            (email.lower(),)
+        )
+        result = cur.fetchone()
+        cur.close()
+        
+        if not result:
+            return None
+        
+        # Verify password
+        if bcrypt.checkpw(password.encode('utf-8'), result['password_hash'].encode('utf-8')):
+            return {
+                'id': result['id'],
+                'email': result['email'],
+                'name': result['name'],
+                'user_type': result['user_type'],
+                'phone': result['phone'],
+                'grade': result['grade']
+            }
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+# Class management
+def schedule_class(title, description, subject, grade, teacher_id, class_date, class_time, duration_minutes, max_students, price):
+    """Schedule a new class"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            """INSERT INTO gyaan_classes (title, description, subject, grade, teacher_id, class_date, class_time, duration_minutes, max_students, price)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+            (title, description, subject, grade, teacher_id, class_date, class_time, duration_minutes, max_students, price)
+        )
+        class_id = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        
+        return class_id
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise Exception(f"Failed to schedule class: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_classes(status=None, teacher_id=None):
+    """Get all classes with optional filters"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        query = """
+            SELECT c.*, t.user_id, u.name as teacher_name
+            FROM gyaan_classes c
+            JOIN gyaan_teachers t ON c.teacher_id = t.id
+            JOIN gyaan_users u ON t.user_id = u.id
+            WHERE 1=1
+        """
+        params = []
+        
+        if status:
+            query += " AND c.status = %s"
+            params.append(status)
+        
+        if teacher_id:
+            query += " AND c.teacher_id = %s"
+            params.append(teacher_id)
+        
+        query += " ORDER BY c.class_date DESC, c.class_time DESC"
+        
+        cur.execute(query, params)
+        classes = cur.fetchall()
+        cur.close()
+        
+        return [dict(c) for c in classes]
+    finally:
+        if conn:
+            conn.close()
+
+def subscribe_to_class(student_id, class_id, payment_id=None):
+    """Subscribe student to a class"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            """INSERT INTO gyaan_subscriptions (student_id, class_id, payment_id, payment_status)
+               VALUES (%s, %s, %s, %s) RETURNING id""",
+            (student_id, class_id, payment_id, 'completed' if payment_id else 'pending')
+        )
+        subscription_id = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        
+        return subscription_id
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise Exception(f"Failed to subscribe: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_student_classes(student_id):
+    """Get all classes a student is subscribed to"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT c.*, u.name as teacher_name, s.subscription_date
+            FROM gyaan_classes c
+            JOIN gyaan_subscriptions s ON c.id = s.class_id
+            JOIN gyaan_teachers t ON c.teacher_id = t.id
+            JOIN gyaan_users u ON t.user_id = u.id
+            WHERE s.student_id = %s AND s.payment_status = 'completed'
+            ORDER BY c.class_date, c.class_time
+        """, (student_id,))
+        
+        classes = cur.fetchall()
+        cur.close()
+        
+        return [dict(c) for c in classes]
+    finally:
+        if conn:
+            conn.close()
+
+def mark_attendance(student_id, class_id, attended=True, duration_minutes=0):
+    """Mark student attendance for a class"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            """INSERT INTO gyaan_attendance (student_id, class_id, attended, joined_at, duration_minutes)
+               VALUES (%s, %s, %s, NOW(), %s)
+               ON CONFLICT (student_id, class_id) 
+               DO UPDATE SET attended = %s, duration_minutes = %s""",
+            (student_id, class_id, attended, duration_minutes, attended, duration_minutes)
+        )
+        conn.commit()
+        cur.close()
+    finally:
+        if conn:
+            conn.close()
+
+def get_class_students(class_id):
+    """Get all students enrolled in a class"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT u.id, u.name, u.email, s.subscription_date, 
+                   a.attended, a.duration_minutes
+            FROM gyaan_users u
+            JOIN gyaan_subscriptions s ON u.id = s.student_id
+            LEFT JOIN gyaan_attendance a ON u.id = a.student_id AND a.class_id = %s
+            WHERE s.class_id = %s AND s.payment_status = 'completed'
+            ORDER BY u.name
+        """, (class_id, class_id))
+        
+        students = cur.fetchall()
+        cur.close()
+        
+        return [dict(s) for s in students]
+    finally:
+        if conn:
+            conn.close()

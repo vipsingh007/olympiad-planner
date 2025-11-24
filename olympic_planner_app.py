@@ -1202,10 +1202,15 @@ with tab2:
     
     # Detailed topic checklist
     st.subheader("✅ Topic Checklist")
+    st.caption("Click checkboxes to mark topics as complete")
     
     subject_tab = st.selectbox("Select subject to track:", ["Math", "Science", "English"], key="progress_subject")
     
     topics = SYLLABUS[grade][subject_tab]
+    
+    # Track changes to batch update
+    if 'topic_update_trigger' not in st.session_state:
+        st.session_state.topic_update_trigger = 0
     
     for i, topic in enumerate(topics):
         col_topic1, col_topic2 = st.columns([4, 1])
@@ -1214,7 +1219,7 @@ with tab2:
             new_state = st.checkbox(
                 topic,
                 value=is_completed,
-                key=f"topic_check_{grade}_{subject_tab}_{i}"
+                key=f"topic_check_{grade}_{subject_tab}_{i}_{st.session_state.topic_update_trigger}"
             )
             
             # Update database if state changed
@@ -1222,9 +1227,21 @@ with tab2:
                 try:
                     if new_state:
                         db.mark_topic_completed(name, grade, subject_tab, topic)
+                        # Update session state cache
+                        if topic not in st.session_state.completed_topics_list:
+                            st.session_state.completed_topics_list.append(topic)
+                        st.session_state.topic_update_trigger += 1
+                        st.success(f"✅ Marked {topic} as complete!")
+                        st.session_state.student_data_loaded = False  # Force data reload
                         st.rerun()
                     else:
                         db.unmark_topic(name, grade, subject_tab, topic)
+                        # Update session state cache
+                        if topic in st.session_state.completed_topics_list:
+                            st.session_state.completed_topics_list.remove(topic)
+                        st.session_state.topic_update_trigger += 1
+                        st.info(f"Unmarked {topic}")
+                        st.session_state.student_data_loaded = False  # Force data reload
                         st.rerun()
                 except Exception as e:
                     st.error(f"Error updating: {e}")
