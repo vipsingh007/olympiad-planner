@@ -1014,7 +1014,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["📅 Weekly Planner", "📈 Progress Tr
 
 with tab1:
     st.header(f"📅 Weekly Study Planner - {name}")
-    st.caption("Plan your week ahead. Track completion in the Progress Tracker tab.")
+    st.caption("Quick and easy weekly planning")
     
     # Week selector
     col_week1, col_week2 = st.columns([2, 1])
@@ -1030,217 +1030,152 @@ with tab1:
     cache_key = f"weekly_plan_{week_key}"
     if cache_key not in st.session_state:
         try:
-            with st.spinner("Loading week..."):
-                all_plans = db.get_weekly_plan(name, grade, week_key)
-                st.session_state[cache_key] = all_plans
+            all_plans = db.get_weekly_plan(name, grade, week_key)
+            st.session_state[cache_key] = all_plans
         except:
             st.session_state[cache_key] = []
     else:
         all_plans = st.session_state[cache_key]
     
-    # Daily schedule
+    # Quick Add Section (at top for easy access)
+    with st.container():
+        st.subheader("⚡ Quick Add Session")
+        
+        col1, col2, col3, col4, col5 = st.columns([2, 2, 3, 1.5, 1])
+        
+        with col1:
+            quick_day = st.selectbox(
+                "Day",
+                ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+                key="quick_day"
+            )
+        
+        with col2:
+            quick_subject = st.selectbox(
+                "Subject",
+                ["Math", "Science", "English"],
+                key="quick_subject"
+            )
+        
+        with col3:
+            # Simple multiselect with all topics (no checkboxes, no complexity)
+            if grade in SYLLABUS and quick_subject in SYLLABUS[grade]:
+                quick_topics = st.multiselect(
+                    "Topics",
+                    SYLLABUS[grade][quick_subject],
+                    key="quick_topics",
+                    placeholder="Select topics to study...",
+                    max_selections=5
+                )
+            else:
+                quick_topics = []
+        
+        with col4:
+            quick_duration = st.number_input(
+                "Minutes",
+                min_value=15,
+                max_value=180,
+                value=STUDY_PLAN.get(grade, {}).get(quick_subject, 45),
+                step=15,
+                key="quick_duration"
+            )
+        
+        with col5:
+            st.write("")  # Spacing
+            if st.button("➕ Add", type="primary", use_container_width=True, key="quick_add_btn"):
+                if not quick_topics:
+                    st.error("Select at least 1 topic")
+                else:
+                    try:
+                        db.save_weekly_plan(
+                            name, grade, week_key, quick_day,
+                            quick_subject,
+                            ','.join(quick_topics),
+                            quick_duration,
+                            False
+                        )
+                        # Clear cache
+                        if cache_key in st.session_state:
+                            del st.session_state[cache_key]
+                        st.success(f"✅ Added to {quick_day}!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+    
+    st.markdown("---")
+    
+    # Weekly view (compact, read-only display)
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     day_emojis = ["📘", "📗", "📙", "📕", "📔", "🌟", "🌈"]
     
-    for day_idx, day in enumerate(days):
-        # Get sessions for this day from cached data
-        day_plans = [p for p in all_plans if p['day_of_week'] == day]
+    # Show in grid layout (3 columns for better use of space)
+    for row_start in range(0, 7, 3):
+        cols = st.columns(3)
         
-        # Calculate total time for the day
-        total_day_minutes = sum([p.get('duration', 0) for p in day_plans])
-        session_count = len(day_plans)
-        
-        # Day card
-        st.markdown(f"### {day_emojis[day_idx]} {day}")
-        
-        if day_plans:
-            # Show sessions in a clean format
-            for session_idx, session in enumerate(day_plans):
-                subject = session.get('subject', 'N/A')
-                duration = session.get('duration', 0)
-                topics = session.get('topics', '').split(',') if session.get('topics') else []
-                
-                # Subject emoji mapping
-                subject_emoji = {"Math": "🔢", "Science": "🔬", "English": "📖", "Rest Day": "😴"}
-                
-                col_sess1, col_sess2 = st.columns([3, 4])
-                
-                with col_sess1:
-                    st.markdown(f"**{subject_emoji.get(subject, '📚')} {subject}** · {duration} min")
-                
-                with col_sess2:
-                    if topics and topics[0]:
-                        topics_display = ", ".join([t.strip() for t in topics[:3] if t.strip()])
-                        if len(topics) > 3:
-                            topics_display += f" +{len(topics)-3} more"
-                        st.caption(f"📝 {topics_display}")
+        for col_idx in range(3):
+            day_idx = row_start + col_idx
+            if day_idx >= 7:
+                break
             
-            # Day summary
-            st.caption(f"📊 Total: {session_count} session{'s' if session_count != 1 else ''} · {total_day_minutes} minutes ({total_day_minutes/60:.1f} hours)")
-        else:
-            st.info(f"No sessions planned for {day}")
-        
-        # Add session button (compact)
-        with st.expander(f"➕ Add session", expanded=False):
-            # Subject selection
-            new_subject = st.selectbox(
-                "📚 Subject",
-                ["Math", "Science", "English", "Rest Day"],
-                key=f"subj_{day}_{week_key}"
-            )
+            day = days[day_idx]
             
-            # Topics selection with preset suggestions
-            if new_subject != "Rest Day":
-                # Show difficulty filter
-                col_diff1, col_diff2 = st.columns([1, 3])
-                with col_diff1:
-                    difficulty_filter = st.selectbox(
-                        "Difficulty",
-                        ["All", "Easy", "Medium", "Hard"],
-                        key=f"diff_{day}_{week_key}"
-                    )
+            with cols[col_idx]:
+                # Get sessions for this day
+                day_plans = [p for p in all_plans if p['day_of_week'] == day]
+                total_day_minutes = sum([p.get('duration', 0) for p in day_plans])
                 
-                # Load preset topics from database
-                try:
-                    preset_topics_list = db.get_preset_topics(
-                        grade, 
-                        new_subject, 
-                        difficulty=difficulty_filter if difficulty_filter != "All" else None
-                    )
-                    
-                    if preset_topics_list:
-                        # Show preset topics with details
-                        with st.expander("💡 Suggested Topics from Curriculum", expanded=True):
-                            st.caption("Click topics to select them")
-                            
-                            # Create topic selection
-                            selected_preset_topics = []
-                            for topic_data in preset_topics_list[:10]:  # Show top 10
-                                topic_name = topic_data['topic']
-                                difficulty = topic_data['difficulty']
-                                est_hours = topic_data['estimated_hours']
-                                
-                                # Difficulty emoji
-                                diff_emoji = {"Easy": "🟢", "Medium": "🟡", "Hard": "🔴"}
-                                
-                                # Checkbox for selection
-                                if st.checkbox(
-                                    f"{diff_emoji.get(difficulty, '⚪')} {topic_name} · ~{est_hours}h",
-                                    key=f"preset_{day}_{week_key}_{topic_name}",
-                                    help=f"Difficulty: {difficulty}, Estimated: {est_hours} hours"
-                                ):
-                                    selected_preset_topics.append(topic_name)
-                            
-                            if len(preset_topics_list) > 10:
-                                st.caption(f"... and {len(preset_topics_list) - 10} more topics")
-                        
-                        # Use selected preset topics or manual selection
-                        if selected_preset_topics:
-                            new_topics = selected_preset_topics
-                        else:
-                            new_topics = st.multiselect(
-                                "📝 Or type custom topics",
-                                SYLLABUS[grade][new_subject],
-                                key=f"topics_{day}_{week_key}",
-                                placeholder="Select or type topics..."
-                            )
-                    else:
-                        # Fallback to original multiselect if no preset topics
-                        new_topics = st.multiselect(
-                            "Topics",
-                            SYLLABUS[grade][new_subject],
-                            key=f"topics_{day}_{week_key}",
-                            placeholder="Select topics..."
-                        )
-                except Exception as e:
-                    # Fallback on error
-                    st.warning(f"Could not load preset topics: {e}")
-                    new_topics = st.multiselect(
-                        "Topics",
-                        SYLLABUS[grade][new_subject],
-                        key=f"topics_{day}_{week_key}",
-                        placeholder="Select topics..."
-                    )
-            else:
-                new_topics = ["Rest"]
-            
-            # Duration and save button
-            col_dur, col_btn = st.columns([2, 1])
-            
-            with col_dur:
-                if new_subject != "Rest Day":
-                    new_duration = st.number_input(
-                        "⏱️ Duration (minutes)",
-                        min_value=15,
-                        max_value=180,
-                        value=STUDY_PLAN[grade].get(new_subject, 45),
-                        step=15,
-                        key=f"dur_{day}_{week_key}"
-                    )
+                # Day header with time
+                st.markdown(f"**{day_emojis[day_idx]} {day}**")
+                if total_day_minutes > 0:
+                    st.caption(f"⏱️ {total_day_minutes} min")
+                
+                # Show sessions (compact)
+                if day_plans:
+                    for session in day_plans:
+                        subject = session.get('subject', 'N/A')
+                        subject_emoji = {"Math": "🔢", "Science": "🔬", "English": "📖"}
+                        st.markdown(f"{subject_emoji.get(subject, '📚')} {subject} - {session.get('duration', 0)}m")
                 else:
-                    new_duration = 0
-                    st.info("Rest day 😴")
-            
-            with col_btn:
-                st.write("")  # Spacing
-                if st.button("➕ Add", key=f"add_{day}_{week_key}", type="primary", use_container_width=True):
-                    if new_subject != "Rest Day" and not new_topics:
-                        st.error("Please select topics")
-                    else:
-                        try:
-                            with st.spinner("Adding..."):
-                                db.save_weekly_plan(
-                                    name, grade, week_key, day, 
-                                    new_subject, 
-                                    ','.join(new_topics) if new_topics else '', 
-                                    new_duration, 
-                                    False
-                                )
-                                # Clear cache to force reload
-                                if cache_key in st.session_state:
-                                    del st.session_state[cache_key]
-                            st.success("✅ Added!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-        
-        st.markdown("---")
+                    st.caption("_No plans_")
+                
+                st.markdown("")  # Spacing
     
+    st.markdown("---")
     # Weekly overview
-    st.markdown("### 📊 Week Overview")
+    st.subheader("📊 Week Summary")
     
     if all_plans:
-            total_sessions = len(all_plans)
-            total_minutes = sum([p.get('duration', 0) for p in all_plans])
-            
-            # Count by subject
-            subject_breakdown = {}
-            for plan in all_plans:
-                subj = plan.get('subject', 'Unknown')
-                subject_breakdown[subj] = subject_breakdown.get(subj, 0) + plan.get('duration', 0)
-            
-            col_ov1, col_ov2, col_ov3 = st.columns(3)
-            
-            with col_ov1:
-                st.metric("📅 Total Sessions", total_sessions)
-            
-            with col_ov2:
-                st.metric("⏱️ Total Time", f"{total_minutes} min", f"{total_minutes/60:.1f} hrs")
-            
-            with col_ov3:
-                avg_per_day = total_minutes / 7
-                st.metric("📈 Avg/Day", f"{avg_per_day:.0f} min")
-            
-            # Subject breakdown
-            if subject_breakdown:
-                st.markdown("**Time by Subject:**")
-                cols = st.columns(len(subject_breakdown))
-                for idx, (subj, mins) in enumerate(subject_breakdown.items()):
-                    with cols[idx]:
-                        emoji = {"Math": "🔢", "Science": "🔬", "English": "📖", "Rest Day": "😴"}.get(subj, "📚")
-                        st.metric(f"{emoji} {subj}", f"{mins} min")
+        total_sessions = len(all_plans)
+        total_minutes = sum([p.get('duration', 0) for p in all_plans])
+        
+        # Count by subject
+        subject_breakdown = {}
+        for plan in all_plans:
+            subj = plan.get('subject', 'Unknown')
+            subject_breakdown[subj] = subject_breakdown.get(subj, 0) + plan.get('duration', 0)
+        
+        col_ov1, col_ov2, col_ov3 = st.columns(3)
+        
+        with col_ov1:
+            st.metric("📅 Total Sessions", total_sessions)
+        
+        with col_ov2:
+            st.metric("⏱️ Total Time", f"{total_minutes/60:.1f} hrs")
+        
+        with col_ov3:
+            avg_per_day = total_minutes / 7
+            st.metric("📈 Avg/Day", f"{avg_per_day:.0f} min")
+        
+        # Subject breakdown
+        if subject_breakdown:
+            st.markdown("**Time by Subject:**")
+            cols = st.columns(len(subject_breakdown))
+            for idx, (subj, mins) in enumerate(subject_breakdown.items()):
+                with cols[idx]:
+                    emoji = {"Math": "🔢", "Science": "🔬", "English": "📖", "Rest Day": "😴"}.get(subj, "📚")
+                    st.metric(f"{emoji} {subj}", f"{mins}m")
     else:
-        st.info("👆 Start planning your week by adding study sessions above!")
+        st.info("💡 **Tip:** Use Quick Add above to plan your week in seconds!")
 
 with tab2:
     st.header(f"📈 Progress Tracker - {name}")
