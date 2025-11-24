@@ -647,34 +647,65 @@ elif user_type == "teacher":
     with teacher_tab3:
         st.header("👥 My Students")
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Students", "45")
-        with col2:
-            st.metric("Avg Attendance", "92%")
-        with col3:
-            st.metric("Active Students", "38")
-        
-        st.markdown("---")
-        
-        st.subheader("📋 Student List")
-        
-        students = [
-            {"name": "Anaya Singh", "attendance": "95%", "assignments": "8/10", "performance": "Excellent"},
-            {"name": "Rohan Kumar", "attendance": "88%", "assignments": "9/10", "performance": "Very Good"},
-            {"name": "Priya Patel", "attendance": "92%", "assignments": "7/10", "performance": "Good"},
-        ]
-        
-        for student in students:
-            col1, col2, col3, col4 = st.columns([2, 1, 1, 1.5])
-            with col1:
-                st.write(f"**{student['name']}**")
-            with col2:
-                st.write(f"📊 {student['attendance']}")
-            with col3:
-                st.write(f"📝 {student['assignments']}")
-            with col4:
-                st.write(student['performance'])
+        # Fetch real students from teacher's classes
+        try:
+            # Get teacher's ID from gyaan_teachers table
+            teacher_user_id = user_data['id']
+            all_teachers = db.get_all_teachers()
+            teacher_record = next((t for t in all_teachers if t['user_id'] == teacher_user_id), None)
+            
+            if teacher_record:
+                teacher_id = teacher_record['id']
+                
+                # Get all classes taught by this teacher
+                teacher_classes = db.get_all_classes(teacher_id=teacher_id)
+                
+                # Get unique students enrolled in these classes
+                all_enrolled_students = []
+                for cls in teacher_classes:
+                    students_in_class = db.get_class_students(cls['id'])
+                    all_enrolled_students.extend(students_in_class)
+                
+                # Remove duplicates (student might be in multiple classes)
+                unique_students = {s['id']: s for s in all_enrolled_students}.values()
+                total_students = len(unique_students)
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Students", total_students)
+                with col2:
+                    attended_count = len([s for s in unique_students if s.get('attended')])
+                    avg_attendance = f"{int((attended_count/total_students)*100)}%" if total_students > 0 else "0%"
+                    st.metric("Avg Attendance", avg_attendance)
+                with col3:
+                    st.metric("Classes", len(teacher_classes))
+                
+                st.markdown("---")
+                st.subheader("📋 Student List")
+                
+                if unique_students:
+                    for student in unique_students:
+                        with st.expander(f"👤 {student['name']}"):
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.write(f"**Email:** {student['email']}")
+                                st.write(f"**Attended:** {'✅ Yes' if student.get('attended') else '⏳ Not yet'}")
+                            with col2:
+                                duration = student.get('duration_minutes', 0)
+                                st.write(f"**Duration:** {duration} minutes")
+                                sub_date = student.get('subscription_date', '')
+                                if sub_date:
+                                    st.write(f"**Enrolled:** {sub_date.strftime('%Y-%m-%d') if hasattr(sub_date, 'strftime') else sub_date}")
+                            with col3:
+                                st.write(f"**Student ID:** {student['id']}")
+                else:
+                    st.info("📝 No students enrolled yet. Once students subscribe to your classes, they'll appear here!")
+            else:
+                st.warning("⚠️ Teacher profile not found. Please contact admin.")
+                
+        except Exception as e:
+            st.error(f"Error loading students: {str(e)}")
+            st.info("💡 Students will appear here once they enroll in your classes.")
     
     with teacher_tab4:
         st.header("📊 Performance Metrics")
