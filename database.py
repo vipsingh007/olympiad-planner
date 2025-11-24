@@ -1287,3 +1287,28 @@ def get_all_teachers():
     finally:
         if conn:
             conn.close()
+
+def get_all_students():
+    """Get all registered students"""
+    conn = None
+    try:
+        conn = get_gyaan_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT u.id, u.name, u.email, u.grade, u.created_at,
+                   COUNT(DISTINCT s.class_id) as enrolled_classes
+            FROM gyaan_users u
+            LEFT JOIN gyaan_subscriptions s ON u.id = s.student_id AND s.payment_status = 'completed'
+            WHERE u.user_type = 'student' AND u.is_active = TRUE
+            GROUP BY u.id, u.name, u.email, u.grade, u.created_at
+            ORDER BY u.created_at DESC
+        """)
+        
+        students = cur.fetchall()
+        cur.close()
+        
+        return [dict(s) for s in students]
+    finally:
+        if conn:
+            conn.close()

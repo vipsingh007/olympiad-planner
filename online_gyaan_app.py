@@ -424,13 +424,25 @@ if user_type == "admin":
     with admin_tab3:
         st.header("👨‍🎓 Student Management")
         
-        col_s1, col_s2, col_s3 = st.columns(3)
-        with col_s1:
-            st.metric("Total Students", "120")
-        with col_s2:
-            st.metric("Active Today", "85")
-        with col_s3:
-            st.metric("New This Week", "12")
+        # Fetch real students
+        try:
+            all_students = db.get_all_students()
+            
+            # Calculate metrics
+            from datetime import datetime, timedelta
+            total_students = len(all_students)
+            new_this_week = len([s for s in all_students if (datetime.now() - s['created_at']).days <= 7])
+            
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
+                st.metric("Total Students", total_students)
+            with col_s2:
+                st.metric("Active", len([s for s in all_students if s['enrolled_classes'] > 0]))
+            with col_s3:
+                st.metric("New This Week", new_this_week)
+        except Exception as e:
+            st.error(f"Error loading students: {str(e)}")
+            all_students = []
         
         st.markdown("---")
         
@@ -438,24 +450,44 @@ if user_type == "admin":
         
         st.subheader("📋 All Students")
         
-        students = [
-            {"name": "Anaya Singh", "grade": "Grade 5", "classes": 8, "hours": 12, "joined": "2024-01-15"},
-            {"name": "Rohan Kumar", "grade": "Grade 7", "classes": 12, "hours": 18, "joined": "2024-02-20"},
-            {"name": "Priya Patel", "grade": "Grade 6", "classes": 10, "hours": 15, "joined": "2024-03-10"},
-        ]
-        
-        for student in students:
-            with st.expander(f"👤 {student['name']} - {student['grade']}"):
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.write(f"**Classes:** {student['classes']}")
-                with col2:
-                    st.write(f"**Hours:** {student['hours']}")
-                with col3:
-                    st.write(f"**Joined:** {student['joined']}")
-                with col4:
-                    if st.button("View Details", key=f"view_{student['name']}"):
-                        st.info("Student details...")
+        # Fetch real students from database
+        try:
+            if all_students:
+                # Filter by search
+                filtered_students = all_students
+                if search_student:
+                    filtered_students = [s for s in all_students if 
+                                       search_student.lower() in s['name'].lower() or 
+                                       search_student.lower() in s['email'].lower()]
+                
+                if filtered_students:
+                    for student in filtered_students:
+                        with st.expander(f"👤 {student['name']} - {student.get('grade', 'Not set')}"):
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.write(f"**Email:** {student['email']}")
+                                st.write(f"**Grade:** {student.get('grade', 'Not set')}")
+                            with col2:
+                                st.write(f"**Enrolled Classes:** {student['enrolled_classes']}")
+                            with col3:
+                                joined_date = student['created_at'].strftime('%Y-%m-%d') if student['created_at'] else 'Unknown'
+                                st.write(f"**Joined:** {joined_date}")
+                            with col4:
+                                st.write(f"**User ID:** {student['id']}")
+                else:
+                    st.info(f"No students found matching '{search_student}'")
+            else:
+                st.info("📝 No students registered yet. Students can sign up on the login page!")
+                st.markdown("""
+                **How students join:**
+                1. Go to login page
+                2. Click "Student Login" tab
+                3. Click "Sign Up"
+                4. Fill in details (name, email, password, grade)
+                5. Account created automatically!
+                """)
+        except Exception as e:
+            st.error(f"Error displaying students: {str(e)}")
     
     with admin_tab4:
         st.header("📊 Platform Analytics")
