@@ -800,31 +800,49 @@ def populate_preset_content(syllabus_data):
             return False  # Already populated
         
         # Define difficulty and estimated hours for topics
-        difficulty_mapping = {
-            "Grade 3": {
-                "Math": ["Easy", "Easy", "Medium", "Medium", "Medium", "Easy", "Medium", "Easy", "Easy", "Medium", "Easy", "Medium"],
-                "Science": ["Easy", "Easy", "Easy", "Easy", "Medium", "Medium", "Easy", "Medium", "Medium", "Medium", "Medium", "Easy"],
-                "English": ["Medium", "Easy", "Medium", "Easy", "Medium", "Easy", "Medium", "Hard", "Easy", "Medium", "Easy", "Easy"]
-            },
-            "Grade 5": {
-                "Math": ["Medium", "Medium", "Medium", "Hard", "Medium", "Medium", "Medium", "Hard", "Medium", "Medium", "Medium", "Medium", "Medium", "Hard", "Hard", "Hard"],
-                "Science": ["Medium", "Medium", "Medium", "Hard", "Hard", "Medium", "Medium", "Medium", "Medium", "Hard", "Medium", "Medium", "Hard", "Medium", "Medium", "Medium"],
-                "English": ["Hard", "Medium", "Medium", "Hard", "Hard", "Hard", "Medium", "Hard", "Hard", "Medium", "Medium", "Hard", "Hard", "Hard"]
-            }
-        }
-        
         hours_mapping = {
             "Easy": 1.0,
             "Medium": 1.5,
             "Hard": 2.0
         }
         
+        # Auto-assign difficulty based on grade level
+        def auto_assign_difficulty(grade_str, num_topics):
+            """Assign difficulty mix based on grade level"""
+            grade_num = int(grade_str.replace("Grade ", ""))
+            
+            if grade_num <= 2:
+                # Grades 1-2: Mostly Easy
+                return ["Easy"] * num_topics
+            elif grade_num <= 4:
+                # Grades 3-4: Mix of Easy and Medium
+                pattern = ["Easy", "Medium"] * (num_topics // 2)
+                if num_topics % 2:
+                    pattern.append("Easy")
+                return pattern[:num_topics]
+            elif grade_num <= 6:
+                # Grades 5-6: Mostly Medium with some Hard
+                pattern = ["Medium", "Medium", "Hard"] * (num_topics // 3)
+                pattern.extend(["Medium"] * (num_topics % 3))
+                return pattern[:num_topics]
+            elif grade_num <= 8:
+                # Grades 7-8: Medium and Hard
+                pattern = ["Medium", "Hard"] * (num_topics // 2)
+                if num_topics % 2:
+                    pattern.append("Medium")
+                return pattern[:num_topics]
+            else:
+                # Grades 9-12: Mostly Hard with some Medium
+                pattern = ["Hard", "Hard", "Medium"] * (num_topics // 3)
+                pattern.extend(["Hard"] * (num_topics % 3))
+                return pattern[:num_topics]
+        
         # Insert topics
         for grade, subjects in syllabus_data.items():
             for subject, topics in subjects.items():
-                difficulties = difficulty_mapping.get(grade, {}).get(subject, ["Medium"] * len(topics))
+                difficulties = auto_assign_difficulty(grade, len(topics))
                 for i, topic in enumerate(topics):
-                    difficulty = difficulties[i] if i < len(difficulties) else "Medium"
+                    difficulty = difficulties[i]
                     estimated_hours = hours_mapping.get(difficulty, 1.5)
                     
                     cur.execute(

@@ -82,58 +82,88 @@ def get_openai_key():
 
 api_key = get_openai_key()
 
-# Olympiad syllabus by grade and subject
+# Olympiad syllabus by grade and subject (Grades 1-12)
 SYLLABUS = {
+    "Grade 1": {
+        "Math": ["Numbers 1-100", "Addition (1-digit)", "Subtraction (1-digit)", "Counting", "Shapes (Circle, Square, Triangle)", "Patterns", "Size Comparison", "Before/After Numbers", "Simple Word Problems"],
+        "Science": ["My Body", "Animals Around Us", "Plants We See", "Food We Eat", "Water", "Air", "Day and Night", "Weather"],
+        "English": ["Alphabet", "Simple Words", "Rhymes", "Short Sentences", "Common Objects", "Colors", "Numbers in Words", "Simple Stories"]
+    },
+    "Grade 2": {
+        "Math": ["Numbers 1-1000", "Addition (2-digit)", "Subtraction (2-digit)", "Multiplication Tables (2, 3, 5, 10)", "Time (Hours)", "Money", "Measurement", "Shapes & Patterns", "Word Problems"],
+        "Science": ["Parts of Plants", "Types of Animals", "Our Body Parts", "Food from Plants", "Clean Water", "Air We Breathe", "Sun and Moon", "Seasons"],
+        "English": ["Vocabulary", "Nouns & Verbs", "Simple Sentences", "Rhymes & Poems", "Stories", "Comprehension", "Adjectives", "Spellings"]
+    },
     "Grade 3": {
-        "Math": [
-            "Number System (1-4 digits)", "Addition & Subtraction", "Multiplication Tables (1-12)",
-            "Division Basics", "Fractions (Halves, Quarters)", "Shapes & Patterns",
-            "Measurement (Length, Weight, Time)", "Money Problems", "Mental Math",
-            "Word Problems", "Geometry Basics", "Data Handling (Pictographs)"
-        ],
-        "Science": [
-            "Living & Non-Living Things", "Plants & Their Parts", "Animals & Their Habitats",
-            "Human Body Parts", "Food & Nutrition", "Air & Water", "Weather & Seasons",
-            "Light & Shadows", "Magnets", "Simple Machines", "Environmental Awareness",
-            "Safety & First Aid"
-        ],
-        "English": [
-            "Reading Comprehension", "Vocabulary Building", "Grammar (Nouns, Verbs, Adjectives)",
-            "Sentence Formation", "Tenses (Simple)", "Punctuation", "Spellings",
-            "Story Writing", "Poem Reading", "Synonyms & Antonyms", "Articles (a, an, the)",
-            "Singular & Plural"
-        ]
+        "Math": ["Number System (1-4 digits)", "Addition & Subtraction", "Multiplication Tables (1-12)", "Division Basics", "Fractions (Halves, Quarters)", "Shapes & Patterns", "Measurement (Length, Weight, Time)", "Money Problems", "Mental Math", "Word Problems", "Geometry Basics", "Data Handling (Pictographs)"],
+        "Science": ["Living & Non-Living Things", "Plants & Their Parts", "Animals & Their Habitats", "Human Body Parts", "Food & Nutrition", "Air & Water", "Weather & Seasons", "Light & Shadows", "Magnets", "Simple Machines", "Environmental Awareness", "Safety & First Aid"],
+        "English": ["Reading Comprehension", "Vocabulary Building", "Grammar (Nouns, Verbs, Adjectives)", "Sentence Formation", "Tenses (Simple)", "Punctuation", "Spellings", "Story Writing", "Poem Reading", "Synonyms & Antonyms", "Articles (a, an, the)", "Singular & Plural"]
+    },
+    "Grade 4": {
+        "Math": ["Large Numbers", "4 Operations", "Factors & Multiples", "Fractions", "Decimals", "Geometry", "Perimeter", "Area", "Time & Calendar", "Money", "Data Handling", "Patterns"],
+        "Science": ["Digestive System", "Skeleton & Muscles", "Plants & Photosynthesis", "Animals & Adaptation", "Matter & Materials", "Force & Motion", "Light & Shadow", "Sound", "Heat", "Water Cycle"],
+        "English": ["Comprehension", "Grammar (All Parts)", "Tenses", "Articles", "Prepositions", "Conjunctions", "Punctuation", "Paragraph Writing", "Letter Writing", "Vocabulary"]
     },
     "Grade 5": {
-        "Math": [
-            "Large Numbers (up to 10 digits)", "Roman Numerals", "Factors & Multiples",
-            "LCM & HCF", "Fractions & Decimals", "Percentages", "Ratio & Proportion",
-            "Algebraic Expressions", "Geometry (Angles, Triangles)", "Perimeter & Area",
-            "Volume & Capacity", "Data Handling (Bar Graphs, Pie Charts)", "Time & Speed",
-            "Profit & Loss", "Simple Interest", "Logical Reasoning"
-        ],
-        "Science": [
-            "Cell Structure", "Plant & Animal Systems", "Food & Digestion",
-            "Respiration & Circulation", "Reproduction in Plants", "Force, Work & Energy",
-            "Simple Machines", "Light & Reflection", "Sound", "Heat & Temperature",
-            "Electricity & Circuits", "Magnets & Magnetism", "Earth & Solar System",
-            "Water Cycle", "Air & Atmosphere", "Environmental Science"
-        ],
-        "English": [
-            "Advanced Reading Comprehension", "Vocabulary (Prefixes, Suffixes)",
-            "Parts of Speech (All)", "Tenses (All)", "Active & Passive Voice",
-            "Direct & Indirect Speech", "Clauses & Phrases", "Essay Writing",
-            "Letter Writing", "Idioms & Proverbs", "Homophones & Homonyms",
-            "Figures of Speech", "Poetry Analysis", "Grammar Application"
-        ]
+        "Math": ["Large Numbers (up to 10 digits)", "Roman Numerals", "Factors & Multiples", "LCM & HCF", "Fractions & Decimals", "Percentages", "Ratio & Proportion", "Algebraic Expressions", "Geometry (Angles, Triangles)", "Perimeter & Area", "Volume & Capacity", "Data Handling (Bar Graphs, Pie Charts)", "Time & Speed", "Profit & Loss", "Simple Interest", "Logical Reasoning"],
+        "Science": ["Cell Structure", "Plant & Animal Systems", "Food & Digestion", "Respiration & Circulation", "Reproduction in Plants", "Force, Work & Energy", "Simple Machines", "Light & Reflection", "Sound", "Heat & Temperature", "Electricity & Circuits", "Magnets & Magnetism", "Earth & Solar System", "Water Cycle", "Air & Atmosphere", "Environmental Science"],
+        "English": ["Advanced Reading Comprehension", "Vocabulary (Prefixes, Suffixes)", "Parts of Speech (All)", "Tenses (All)", "Active & Passive Voice", "Direct & Indirect Speech", "Clauses & Phrases", "Essay Writing", "Letter Writing", "Idioms & Proverbs", "Homophones & Homonyms", "Figures of Speech", "Poetry Analysis", "Grammar Application"]
+    },
+    "Grade 6": {
+        "Math": ["Integers", "Fractions & Decimals", "Algebra Basics", "Ratio & Proportion", "Percentage", "Profit & Loss", "Simple & Compound Interest", "Geometry", "Mensuration", "Data Handling", "Symmetry", "Practical Geometry"],
+        "Science": ["Nutrition", "Components of Food", "Fiber to Fabric", "Sorting Materials", "Separation of Substances", "Changes Around Us", "Living Organisms", "Motion & Measurement", "Light & Shadows", "Electricity & Circuits", "Magnets", "Water", "Air", "Garbage Management"],
+        "English": ["Reading Comprehension", "Grammar", "Writing Skills", "Vocabulary", "Literature", "Prose & Poetry", "Tenses", "Voice", "Speech", "Composition"]
+    },
+    "Grade 7": {
+        "Math": ["Integers", "Fractions & Decimals", "Data Handling", "Simple Equations", "Lines & Angles", "Triangles", "Comparing Quantities", "Rational Numbers", "Practical Geometry", "Perimeter & Area", "Algebraic Expressions", "Exponents & Powers", "Symmetry", "Visualizing Solid Shapes"],
+        "Science": ["Nutrition in Plants & Animals", "Heat", "Acids, Bases & Salts", "Physical & Chemical Changes", "Weather, Climate & Adaptations", "Winds, Storms & Cyclones", "Soil", "Respiration", "Transportation in Animals & Plants", "Reproduction in Plants", "Motion & Time", "Electric Current", "Light", "Water", "Forests", "Wastewater"],
+        "English": ["Advanced Comprehension", "Grammar & Composition", "Literature", "Writing Skills", "Vocabulary", "Functional English", "Creative Writing", "Formal Letters", "Speech Writing", "Debate"]
+    },
+    "Grade 8": {
+        "Math": ["Rational Numbers", "Linear Equations", "Understanding Quadrilaterals", "Practical Geometry", "Data Handling", "Squares & Square Roots", "Cubes & Cube Roots", "Comparing Quantities", "Algebraic Expressions", "Mensuration", "Exponents & Powers", "Direct & Inverse Proportions", "Factorization", "Graphs", "Solid Shapes"],
+        "Science": ["Crop Production", "Microorganisms", "Synthetic Fibers & Plastics", "Metals & Non-Metals", "Coal & Petroleum", "Combustion & Flame", "Conservation", "Cell Structure", "Reproduction", "Reaching Adolescence", "Force & Pressure", "Friction", "Sound", "Chemical Effects of Current", "Light", "Stars & Solar System", "Pollution"],
+        "English": ["Comprehension", "Grammar", "Writing", "Literature", "Vocabulary", "Composition", "Formal Writing", "Report Writing", "Article Writing", "Story Writing"]
+    },
+    "Grade 9": {
+        "Math": ["Number Systems", "Polynomials", "Coordinate Geometry", "Linear Equations (2 variables)", "Euclid's Geometry", "Lines & Angles", "Triangles", "Quadrilaterals", "Circles", "Constructions", "Heron's Formula", "Surface Areas & Volumes", "Statistics", "Probability"],
+        "Science": ["Matter", "Atoms & Molecules", "Structure of Atom", "Cell", "Tissues", "Motion", "Force & Laws of Motion", "Gravitation", "Work & Energy", "Sound", "Natural Resources", "Diversity in Living", "Disease & Health", "Crop Improvement"],
+        "English": ["Literature", "Grammar", "Writing Skills", "Comprehension", "Prose", "Poetry", "Drama", "Composition", "Formal Letters", "Notice Writing", "Message Writing", "Article Writing"]
+    },
+    "Grade 10": {
+        "Math": ["Real Numbers", "Polynomials", "Linear Equations", "Quadratic Equations", "Arithmetic Progressions", "Triangles", "Coordinate Geometry", "Trigonometry", "Circles", "Constructions", "Mensuration", "Surface Areas & Volumes", "Statistics", "Probability"],
+        "Science": ["Chemical Reactions", "Acids, Bases & Salts", "Metals & Non-Metals", "Carbon Compounds", "Periodic Classification", "Life Processes", "Control & Coordination", "Reproduction", "Heredity & Evolution", "Light", "Human Eye", "Electricity", "Magnetic Effects", "Energy Sources", "Environment", "Natural Resources"],
+        "English": ["Literature", "Grammar", "Writing", "Comprehension", "Prose", "Poetry", "Drama", "Novel", "Letter Writing", "Article Writing", "Report Writing", "Story Writing"]
+    },
+    "Grade 11": {
+        "Math": ["Sets", "Relations & Functions", "Trigonometry", "Complex Numbers", "Linear Inequalities", "Permutations & Combinations", "Binomial Theorem", "Sequences & Series", "Straight Lines", "Conic Sections", "3D Geometry", "Limits & Derivatives", "Statistics", "Probability"],
+        "Science": ["Units & Measurements", "Motion", "Laws of Motion", "Work Energy Power", "Rotational Motion", "Gravitation", "Mechanical Properties", "Thermodynamics", "Kinetic Theory", "Oscillations", "Waves", "Classification", "Chemical Bonding", "States of Matter", "Equilibrium", "Redox Reactions", "Organic Chemistry", "Cell", "Biomolecules", "Plant Physiology", "Human Physiology", "Respiration"],
+        "English": ["Literature", "Reading Comprehension", "Writing Skills", "Grammar", "Prose", "Poetry", "Novel", "Note Making", "Summarizing", "Report Writing", "Debate Writing", "Speech Writing"]
+    },
+    "Grade 12": {
+        "Math": ["Relations & Functions", "Inverse Trigonometry", "Matrices", "Determinants", "Continuity & Differentiability", "Applications of Derivatives", "Integrals", "Applications of Integrals", "Differential Equations", "Vectors", "3D Geometry", "Linear Programming", "Probability"],
+        "Science": ["Electric Charges", "Electrostatic Potential", "Current Electricity", "Moving Charges", "Magnetism", "Electromagnetic Induction", "AC", "Electromagnetic Waves", "Ray Optics", "Wave Optics", "Dual Nature", "Atoms", "Nuclei", "Semiconductors", "Communication Systems", "Solid State", "Solutions", "Electrochemistry", "Chemical Kinetics", "Surface Chemistry", "p-Block Elements", "d & f Block Elements", "Coordination Compounds", "Aldehydes Ketones", "Carboxylic Acids", "Amines", "Biomolecules", "Polymers", "Chemistry in Everyday Life", "Reproduction", "Genetics", "Evolution", "Human Health", "Microbes", "Biotechnology", "Organisms & Populations", "Ecosystem", "Biodiversity", "Environmental Issues"],
+        "English": ["Literature", "Advanced Comprehension", "Writing Skills", "Prose", "Poetry", "Drama", "Novel", "Note Making", "Summarizing", "Report Writing", "Article Writing", "Speech Writing", "Debate Writing"]
     }
 }
 
-# Study time recommendations
+# Study time recommendations (minutes per session)
 STUDY_PLAN = {
+    "Grade 1": {"Math": 30, "Science": 20, "English": 20},
+    "Grade 2": {"Math": 30, "Science": 25, "English": 25},
     "Grade 3": {"Math": 45, "Science": 30, "English": 30},
-    "Grade 5": {"Math": 60, "Science": 45, "English": 45}
+    "Grade 4": {"Math": 45, "Science": 35, "English": 35},
+    "Grade 5": {"Math": 60, "Science": 45, "English": 45},
+    "Grade 6": {"Math": 60, "Science": 45, "English": 45},
+    "Grade 7": {"Math": 60, "Science": 50, "English": 45},
+    "Grade 8": {"Math": 60, "Science": 50, "English": 45},
+    "Grade 9": {"Math": 75, "Science": 60, "English": 45},
+    "Grade 10": {"Math": 75, "Science": 60, "English": 45},
+    "Grade 11": {"Math": 90, "Science": 75, "English": 45},
+    "Grade 12": {"Math": 90, "Science": 75, "English": 45}
 }
+
+# All available grades
+ALL_GRADES = [f"Grade {i}" for i in range(1, 13)]
 
 # Initialize session state
 if "authenticated" not in st.session_state:
@@ -215,7 +245,7 @@ if not st.session_state.authenticated:
                     if parent_email_for_student:
                         # Simplified: Get students by trying to match
                         name = st.text_input("Your Name:", key="student_name_login")
-                        grade = st.selectbox("Your Grade:", ["Grade 3", "Grade 5"], key="student_grade_login")
+                        grade = st.selectbox("Your Grade:", ALL_GRADES, key="student_grade_login")
                         
                         if st.button("🚀 Start Learning!", type="primary", use_container_width=True):
                             if name:
@@ -256,7 +286,7 @@ if not st.session_state.authenticated:
                 with c1:
                     kid_name = st.text_input(f"Name", key=f"kid_name_{i}", placeholder=f"Child {i+1} name")
                 with c2:
-                    kid_grade = st.selectbox(f"Grade", ["Grade 3", "Grade 5"], key=f"kid_grade_{i}")
+                    kid_grade = st.selectbox(f"Grade", ALL_GRADES, key=f"kid_grade_{i}")
                 
                 if kid_name:
                     kids_data.append({"name": kid_name, "grade": kid_grade})
@@ -346,7 +376,7 @@ if user_type == "parent":
         # Add new kid
         with st.expander("➕ Add Child", expanded=len(family_students) == 0):
             kid_name = st.text_input("Child's Name:", key="add_kid_name")
-            kid_grade = st.selectbox("Grade:", ["Grade 3", "Grade 5"], key="add_kid_grade")
+            kid_grade = st.selectbox("Grade:", ALL_GRADES, key="add_kid_grade")
             
             if st.button("➕ Add Child", use_container_width=True):
                 if kid_name:
