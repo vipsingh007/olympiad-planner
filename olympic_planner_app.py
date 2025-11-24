@@ -650,196 +650,212 @@ if user_type == "parent":
         
         st.markdown("---")
         
-        # Detailed view - select student
-        st.header("🔍 Detailed View")
-        selected_student = st.selectbox(
-            "Select student to view details:",
-            options=[f"{name} ({grade})" for name, grade in students]
-        )
+        # Detailed view - show all students by default
+        st.header("🔍 Detailed View - All Kids")
+        st.caption("Expand any section to see more details")
         
-        # Parse selected student
-        selected_name = selected_student.split(" (")[0]
-        selected_grade = selected_student.split("(")[1].replace(")", "")
-        
-        # Get detailed data
-        student_data = db.get_or_create_student(selected_name, selected_grade)
-        completed_topics_db = db.get_completed_topics(selected_name, selected_grade)
-        completed_topics_list = [t['topic'] for t in completed_topics_db]
-        total_hours = db.get_total_study_hours(selected_name, selected_grade)
-        
-        # Create tabs for detailed view
-        dtab1, dtab2, dtab3, dtab4, dtab5 = st.tabs(["📊 Progress", "📅 Weekly Plan", "🎯 Quiz Scores", "🏆 Achievements", "📝 Recent Activity"])
-        
-        with dtab1:
-            st.subheader(f"📊 {selected_name}'s Progress")
+        # Loop through all students and show their details
+        for student_idx, (selected_name, selected_grade) in enumerate(students):
             
-            # Progress by subject
-            col1, col2, col3 = st.columns(3)
+            # Get detailed data for this student
+            student_data = db.get_or_create_student(selected_name, selected_grade)
+            completed_topics_db = db.get_completed_topics(selected_name, selected_grade)
+            completed_topics_list = [t['topic'] for t in completed_topics_db]
+            total_hours = db.get_total_study_hours(selected_name, selected_grade)
             
-            subjects = ["Math", "Science", "English"]
-            subject_counts = {subj: 0 for subj in subjects}
-            
-            for topic_data in completed_topics_db:
-                topic = topic_data['topic']
-                for subj in subjects:
-                    if subj in topic_data.get('subject', ''):
-                        subject_counts[subj] += 1
-            
-            with col1:
-                st.metric("🔢 Math Topics", subject_counts["Math"])
-            with col2:
-                st.metric("🔬 Science Topics", subject_counts["Science"])
-            with col3:
-                st.metric("📖 English Topics", subject_counts["English"])
-            
-            st.markdown("---")
-            
-            # Completed topics list
-            st.subheader("✅ Completed Topics")
-            if completed_topics_list:
-                for i, topic_data in enumerate(completed_topics_db[:20], 1):
-                    st.markdown(f"{i}. **{topic_data['topic']}** ({topic_data['subject']})")
-                if len(completed_topics_db) > 20:
-                    st.caption(f"... and {len(completed_topics_db) - 20} more")
-            else:
-                st.info("No topics completed yet.")
-        
-        with dtab2:
-            st.subheader(f"📅 {selected_name}'s Weekly Plan")
-            
-            # Show this week's plan
-            import datetime
-            today = datetime.date.today()
-            week_start = today - datetime.timedelta(days=today.weekday())
-            
-            for i in range(7):
-                day = week_start + datetime.timedelta(days=i)
-                day_name = day.strftime("%A")
-                day_str = day.strftime("%Y-%m-%d")
-                
-                with st.expander(f"{'📍' if day == today else '📅'} {day_name} ({day.strftime('%b %d')})"):
-                    plans = db.get_weekly_plan(selected_name, selected_grade, day_str)
-                    if plans:
-                        for plan in plans:
-                            st.markdown(f"**{plan['subject']}:** {plan['topic']} - {plan['duration']} min")
+            # Student card with expander
+            with st.expander(f"📚 {selected_name} ({selected_grade})", expanded=len(students) == 1):
+                # Quick stats row
+                col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                with col_s1:
+                    st.metric("Topics", len(completed_topics_list))
+                with col_s2:
+                    st.metric("Hours", f"{total_hours:.1f}")
+                with col_s3:
+                    st.metric("Streak", f"{student_data.get('streak_days', 0)} 🔥")
+                with col_s4:
+                    quiz_stats = db.get_quiz_stats(selected_name, selected_grade)
+                    if quiz_stats['total_quizzes'] > 0:
+                        st.metric("Quizzes", f"{quiz_stats['total_quizzes']}")
                     else:
-                        st.caption("No plan for this day")
-        
-        with dtab3:
-            st.subheader(f"🎯 {selected_name}'s Quiz Scores")
-            
-            # Get quiz results
-            quiz_results = db.get_quiz_results(selected_name, selected_grade, limit=20)
-            quiz_stats = db.get_quiz_stats(selected_name, selected_grade)
-            
-            if quiz_stats['total_quizzes'] > 0:
-                # Summary stats
-                col_q1, col_q2, col_q3 = st.columns(3)
-                with col_q1:
-                    st.metric("Total Quizzes", quiz_stats['total_quizzes'])
-                with col_q2:
-                    st.metric("Average Score", f"{quiz_stats['avg_percentage']:.1f}%")
-                with col_q3:
-                    if quiz_stats['avg_percentage'] >= 80:
-                        st.metric("Performance", "⭐ Excellent")
-                    elif quiz_stats['avg_percentage'] >= 60:
-                        st.metric("Performance", "👍 Good")
-                    else:
-                        st.metric("Performance", "📈 Improving")
+                        st.metric("Quizzes", "0")
                 
                 st.markdown("---")
-                st.markdown("#### Recent Quizzes")
                 
-                # Show recent quiz results
-                for quiz in quiz_results:
-                    created_at = quiz['created_at']
-                    date_str = created_at.strftime("%b %d, %Y") if hasattr(created_at, 'strftime') else str(created_at)
+                # Create tabs for detailed view
+                dtab1, dtab2, dtab3, dtab4, dtab5 = st.tabs(["📊 Progress", "📅 Weekly Plan", "🎯 Quiz Scores", "🏆 Achievements", "📝 Recent Activity"])
+                
+                with dtab1:
+                    st.subheader(f"📊 Progress by Subject")
                     
-                    score = quiz['score']
-                    total = quiz['num_questions']
-                    percentage = (score / total * 100) if total > 0 else 0
+                    # Progress by subject
+                    col1, col2, col3 = st.columns(3)
                     
-                    # Color based on performance
-                    if percentage >= 80:
-                        emoji = "⭐"
-                        color = "green"
-                    elif percentage >= 60:
-                        emoji = "👍"
-                        color = "blue"
-                    else:
-                        emoji = "📈"
-                        color = "orange"
+                    subjects = ["Math", "Science", "English"]
+                    subject_counts = {subj: 0 for subj in subjects}
                     
-                    with st.expander(f"{emoji} {quiz['subject']} - {score}/{total} ({percentage:.0f}%) - {date_str}"):
-                        st.markdown(f"**Topics:** {quiz['topics']}")
-                        st.progress(percentage / 100)
-                        
-                        if percentage >= 80:
-                            st.success("Excellent work! 🎉")
-                        elif percentage >= 60:
-                            st.info("Good job! Keep practicing! 📚")
-                        else:
-                            st.warning("Keep trying! Review these topics again. 💪")
-            else:
-                st.info("No quizzes taken yet. Take a quiz in the Quiz tab!")
-        
-        with dtab4:
-            st.subheader(f"🏆 {selected_name}'s Achievements")
-            
-            # Calculate badges
-            badges_earned = []
-            
-            if total_hours >= 1:
-                badges_earned.append("🎯 First Hour - Logged 1 hour")
-            if total_hours >= 10:
-                badges_earned.append("💪 Dedicated Learner - 10+ hours")
-            if total_hours >= 25:
-                badges_earned.append("🔥 Study Master - 25+ hours")
-            if total_hours >= 50:
-                badges_earned.append("👑 Olympiad Champion - 50+ hours")
-            
-            if len(completed_topics_list) >= 5:
-                badges_earned.append("📚 Topic Explorer - 5 topics")
-            if len(completed_topics_list) >= 15:
-                badges_earned.append("🌟 Knowledge Builder - 15 topics")
-            if len(completed_topics_list) >= 30:
-                badges_earned.append("🎓 Expert Student - 30 topics")
-            
-            if student_data.get('streak_days', 0) >= 3:
-                badges_earned.append("🔥 3-Day Streak")
-            if student_data.get('streak_days', 0) >= 7:
-                badges_earned.append("⚡ Week Warrior - 7 days")
-            if student_data.get('streak_days', 0) >= 14:
-                badges_earned.append("💎 Two Week Champion")
-            
-            if badges_earned:
-                for badge in badges_earned:
-                    st.success(badge)
-            else:
-                st.info("No badges earned yet. Keep studying!")
-        
-        with dtab5:
-            st.subheader(f"📝 {selected_name}'s Recent Activity")
-            
-            # Get recent study sessions
-            sessions = db.get_recent_study_sessions(selected_name, selected_grade, limit=10)
-            
-            if sessions:
-                for session in sessions:
-                    created_at = session['created_at']
-                    subject = session['subject']
-                    duration_min = session['duration_minutes']
-                    topics = session['topics']
+                    for topic_data in completed_topics_db:
+                        topic = topic_data['topic']
+                        for subj in subjects:
+                            if subj in topic_data.get('subject', ''):
+                                subject_counts[subj] += 1
                     
-                    # Format date
-                    date_str = created_at.strftime("%b %d, %Y") if hasattr(created_at, 'strftime') else str(created_at)
+                    with col1:
+                        st.metric("🔢 Math Topics", subject_counts["Math"])
+                    with col2:
+                        st.metric("🔬 Science Topics", subject_counts["Science"])
+                    with col3:
+                        st.metric("📖 English Topics", subject_counts["English"])
                     
-                    st.markdown(f"**{date_str}** - {subject} ({duration_min} min)")
-                    if topics:
-                        st.caption(f"📝 Topics: {topics}")
                     st.markdown("---")
-            else:
-                st.info("No study sessions logged yet.")
+                    
+                    # Completed topics list
+                    st.subheader("✅ Completed Topics")
+                    if completed_topics_list:
+                        for i, topic_data in enumerate(completed_topics_db[:20], 1):
+                            st.markdown(f"{i}. **{topic_data['topic']}** ({topic_data['subject']})")
+                        if len(completed_topics_db) > 20:
+                            st.caption(f"... and {len(completed_topics_db) - 20} more")
+                    else:
+                        st.info("No topics completed yet.")
+                
+                with dtab2:
+                    st.subheader(f"📅 This Week's Plan")
+                    
+                    # Show this week's plan
+                    import datetime
+                    today = datetime.date.today()
+                    week_start = today - datetime.timedelta(days=today.weekday())
+                    
+                    for i in range(7):
+                        day = week_start + datetime.timedelta(days=i)
+                        day_name = day.strftime("%A")
+                        day_str = day.strftime("%Y-%m-%d")
+                        
+                        with st.expander(f"{'📍' if day == today else '📅'} {day_name} ({day.strftime('%b %d')})"):
+                            plans = db.get_weekly_plan(selected_name, selected_grade, day_str)
+                            if plans:
+                                for plan in plans:
+                                    st.markdown(f"**{plan['subject']}:** {plan['topic']} - {plan['duration']} min")
+                            else:
+                                st.caption("No plan for this day")
+                
+                with dtab3:
+                    st.subheader(f"🎯 Quiz Performance")
+                    
+                    # Get quiz results
+                    quiz_results = db.get_quiz_results(selected_name, selected_grade, limit=20)
+                    quiz_stats = db.get_quiz_stats(selected_name, selected_grade)
+                    
+                    if quiz_stats['total_quizzes'] > 0:
+                        # Summary stats
+                        col_q1, col_q2, col_q3 = st.columns(3)
+                        with col_q1:
+                            st.metric("Total Quizzes", quiz_stats['total_quizzes'])
+                        with col_q2:
+                            st.metric("Average Score", f"{quiz_stats['avg_percentage']:.1f}%")
+                        with col_q3:
+                            if quiz_stats['avg_percentage'] >= 80:
+                                st.metric("Performance", "⭐ Excellent")
+                            elif quiz_stats['avg_percentage'] >= 60:
+                                st.metric("Performance", "👍 Good")
+                            else:
+                                st.metric("Performance", "📈 Improving")
+                        
+                        st.markdown("---")
+                        st.markdown("#### Recent Quizzes")
+                        
+                        # Show recent quiz results
+                        for quiz in quiz_results:
+                            created_at = quiz['created_at']
+                            date_str = created_at.strftime("%b %d, %Y") if hasattr(created_at, 'strftime') else str(created_at)
+                            
+                            score = quiz['score']
+                            total = quiz['num_questions']
+                            percentage = (score / total * 100) if total > 0 else 0
+                            
+                            # Color based on performance
+                            if percentage >= 80:
+                                emoji = "⭐"
+                            elif percentage >= 60:
+                                emoji = "👍"
+                            else:
+                                emoji = "📈"
+                            
+                            with st.expander(f"{emoji} {quiz['subject']} - {score}/{total} ({percentage:.0f}%) - {date_str}"):
+                                st.markdown(f"**Topics:** {quiz['topics']}")
+                                st.progress(percentage / 100)
+                                
+                                if percentage >= 80:
+                                    st.success("Excellent work! 🎉")
+                                elif percentage >= 60:
+                                    st.info("Good job! Keep practicing! 📚")
+                                else:
+                                    st.warning("Keep trying! Review these topics again. 💪")
+                    else:
+                        st.info("No quizzes taken yet.")
+                
+                with dtab4:
+                    st.subheader(f"🏆 Achievements & Badges")
+                    
+                    # Calculate badges
+                    badges_earned = []
+                    
+                    if total_hours >= 1:
+                        badges_earned.append("🎯 First Hour - Logged 1 hour")
+                    if total_hours >= 10:
+                        badges_earned.append("💪 Dedicated Learner - 10+ hours")
+                    if total_hours >= 25:
+                        badges_earned.append("🔥 Study Master - 25+ hours")
+                    if total_hours >= 50:
+                        badges_earned.append("👑 Olympiad Champion - 50+ hours")
+                    
+                    if len(completed_topics_list) >= 5:
+                        badges_earned.append("📚 Topic Explorer - 5 topics")
+                    if len(completed_topics_list) >= 15:
+                        badges_earned.append("🌟 Knowledge Builder - 15 topics")
+                    if len(completed_topics_list) >= 30:
+                        badges_earned.append("🎓 Expert Student - 30 topics")
+                    
+                    if student_data.get('streak_days', 0) >= 3:
+                        badges_earned.append("🔥 3-Day Streak")
+                    if student_data.get('streak_days', 0) >= 7:
+                        badges_earned.append("⚡ Week Warrior - 7 days")
+                    if student_data.get('streak_days', 0) >= 14:
+                        badges_earned.append("💎 Two Week Champion")
+                    
+                    if badges_earned:
+                        for badge in badges_earned:
+                            st.success(badge)
+                    else:
+                        st.info("No badges earned yet. Keep studying!")
+                
+                with dtab5:
+                    st.subheader(f"📝 Recent Study Sessions")
+                    
+                    # Get recent study sessions
+                    sessions = db.get_recent_study_sessions(selected_name, selected_grade, limit=10)
+                    
+                    if sessions:
+                        for session in sessions:
+                            created_at = session['created_at']
+                            subject = session['subject']
+                            duration_min = session['duration_minutes']
+                            topics = session['topics']
+                            
+                            # Format date
+                            date_str = created_at.strftime("%b %d, %Y") if hasattr(created_at, 'strftime') else str(created_at)
+                            
+                            st.markdown(f"**{date_str}** - {subject} ({duration_min} min)")
+                            if topics:
+                                st.caption(f"📝 Topics: {topics}")
+                            st.markdown("---")
+                    else:
+                        st.info("No study sessions logged yet.")
+                
+                # Add spacing between students
+                if student_idx < len(students) - 1:
+                    st.markdown("---")
         
     except Exception as e:
         import traceback
