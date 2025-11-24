@@ -373,40 +373,53 @@ if user_type == "admin":
         col_t1, col_t2 = st.columns([2, 1])
         
         with col_t1:
-            st.subheader("Add New Teacher")
-            new_teacher_name = st.text_input("Teacher Name")
-            new_teacher_email = st.text_input("Email")
-            new_teacher_subject = st.multiselect("Subjects", ["Math", "Science", "English", "Coding", "Art"])
+            st.subheader("📢 How Teachers Join")
+            st.info("""
+            **Teachers can sign up on their own!**
             
-            if st.button("➕ Add Teacher"):
-                if new_teacher_name and new_teacher_email:
-                    st.success(f"✅ Teacher {new_teacher_name} added!")
+            📋 Steps for new teachers:
+            1. Go to the login page
+            2. Click "Teacher Login" tab
+            3. Click "Sign Up"
+            4. Fill in their details
+            5. Account automatically created!
+            
+            Once they sign up, they'll appear in the list below.
+            """)
         
         with col_t2:
-            st.metric("Total Teachers", "8")
-            st.metric("Active Today", "5")
+            # Fetch real teacher count
+            try:
+                all_teachers = db.get_all_teachers()
+                st.metric("Total Teachers", len(all_teachers))
+                st.metric("Active", len([t for t in all_teachers if t.get('rating', 0) > 0]))
+            except:
+                st.metric("Total Teachers", "0")
+                st.metric("Active", "0")
         
         st.markdown("---")
         st.subheader("👥 All Teachers")
         
-        teachers = [
-            {"name": "Dr. Amit Kumar", "subject": "Mathematics", "classes": 12, "students": 45, "rating": 4.8},
-            {"name": "Prof. Priya Sharma", "subject": "Science", "classes": 15, "students": 52, "rating": 4.9},
-            {"name": "Mr. Rahul Verma", "subject": "English", "classes": 10, "students": 38, "rating": 4.7},
-        ]
-        
-        for teacher in teachers:
-            col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1, 1, 1])
-            with col1:
-                st.write(f"**{teacher['name']}**")
-            with col2:
-                st.write(teacher['subject'])
-            with col3:
-                st.write(f"📚 {teacher['classes']}")
-            with col4:
-                st.write(f"👥 {teacher['students']}")
-            with col5:
-                st.write(f"⭐ {teacher['rating']}")
+        # Fetch real teachers from database
+        try:
+            all_teachers = db.get_all_teachers()
+            if all_teachers:
+                for teacher in all_teachers:
+                    with st.expander(f"👨‍🏫 {teacher['name']} - {teacher['email']}"):
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.write(f"**Subjects:** {', '.join(teacher.get('subjects', ['Not set']))}")
+                            st.write(f"**Bio:** {teacher.get('bio', 'No bio yet')}")
+                        with col2:
+                            st.write(f"📚 **Classes:** {teacher.get('total_classes', 0)}")
+                            st.write(f"👥 **Students:** {teacher.get('total_students', 0)}")
+                        with col3:
+                            st.write(f"⭐ **Rating:** {teacher.get('rating', 0):.1f}/5.0")
+                            st.write(f"**User ID:** {teacher['user_id']}")
+            else:
+                st.info("📝 No teachers registered yet. Teachers can sign up on the login page!")
+        except Exception as e:
+            st.error(f"Error loading teachers: {str(e)}")
     
     with admin_tab3:
         st.header("👨‍🎓 Student Management")
