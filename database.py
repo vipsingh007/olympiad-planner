@@ -8,7 +8,7 @@ import re
 
 # Database connection with retry logic
 def get_db_connection():
-    """Create database connection with optimized settings"""
+    """Create database connection with optimized settings (Olympic Planner)"""
     max_retries = 2
     
     for attempt in range(max_retries):
@@ -24,6 +24,25 @@ def get_db_connection():
                 time.sleep(0.5)
             else:
                 raise Exception(f"Database connection failed: {str(e)}")
+
+def get_gyaan_db_connection():
+    """Create database connection for Online Gyaan platform (uses same database as Olympic Planner)"""
+    max_retries = 2
+    
+    for attempt in range(max_retries):
+        try:
+            # Use the same database connection as Olympic Planner
+            conn = psycopg2.connect(
+                st.secrets["database"]["url"],
+                cursor_factory=RealDictCursor,
+                connect_timeout=5
+            )
+            return conn
+        except (psycopg2.OperationalError, psycopg2.DatabaseError) as e:
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
+            else:
+                raise Exception(f"Online Gyaan database connection failed: {str(e)}")
 
 def initialize_database():
     """Initialize all database tables including multi-tenant support"""
@@ -916,7 +935,7 @@ def initialize_online_gyaan_db():
     """Initialize database tables for Online Gyaan platform"""
     conn = None
     try:
-        conn = get_db_connection()
+        conn = get_gyaan_db_connection()
         cur = conn.cursor()
         
         # Users table (for all user types)
@@ -1026,7 +1045,7 @@ def create_gyaan_user(email, password, name, user_type, phone=None, grade=None):
         import bcrypt
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         
-        conn = get_db_connection()
+        conn = get_gyaan_db_connection()
         cur = conn.cursor()
         
         cur.execute(
@@ -1052,7 +1071,7 @@ def authenticate_gyaan_user(email, password):
     conn = None
     try:
         import bcrypt
-        conn = get_db_connection()
+        conn = get_gyaan_db_connection()
         cur = conn.cursor()
         
         cur.execute(
@@ -1085,7 +1104,7 @@ def schedule_class(title, description, subject, grade, teacher_id, class_date, c
     """Schedule a new class"""
     conn = None
     try:
-        conn = get_db_connection()
+        conn = get_gyaan_db_connection()
         cur = conn.cursor()
         
         cur.execute(
@@ -1110,7 +1129,7 @@ def get_all_classes(status=None, teacher_id=None):
     """Get all classes with optional filters"""
     conn = None
     try:
-        conn = get_db_connection()
+        conn = get_gyaan_db_connection()
         cur = conn.cursor()
         
         query = """
@@ -1145,7 +1164,7 @@ def subscribe_to_class(student_id, class_id, payment_id=None):
     """Subscribe student to a class"""
     conn = None
     try:
-        conn = get_db_connection()
+        conn = get_gyaan_db_connection()
         cur = conn.cursor()
         
         cur.execute(
@@ -1170,7 +1189,7 @@ def get_student_classes(student_id):
     """Get all classes a student is subscribed to"""
     conn = None
     try:
-        conn = get_db_connection()
+        conn = get_gyaan_db_connection()
         cur = conn.cursor()
         
         cur.execute("""
@@ -1195,7 +1214,7 @@ def mark_attendance(student_id, class_id, attended=True, duration_minutes=0):
     """Mark student attendance for a class"""
     conn = None
     try:
-        conn = get_db_connection()
+        conn = get_gyaan_db_connection()
         cur = conn.cursor()
         
         cur.execute(
@@ -1215,7 +1234,7 @@ def get_class_students(class_id):
     """Get all students enrolled in a class"""
     conn = None
     try:
-        conn = get_db_connection()
+        conn = get_gyaan_db_connection()
         cur = conn.cursor()
         
         cur.execute("""

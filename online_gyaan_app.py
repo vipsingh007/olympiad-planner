@@ -11,8 +11,33 @@ if 'db_initialized_gyaan' not in st.session_state:
     try:
         db.initialize_online_gyaan_db()
         st.session_state.db_initialized_gyaan = True
+        st.session_state.db_available = True
     except Exception as e:
-        st.error(f"Database initialization error: {e}")
+        st.session_state.db_initialized_gyaan = False
+        st.session_state.db_available = False
+        st.session_state.db_error = str(e)
+
+# Show database status
+if not st.session_state.get('db_available', False):
+    st.warning("""
+    ⚠️ **Database Not Connected** 
+    
+    Running in **DEMO MODE** with hardcoded data. To enable full functionality:
+    
+    1. **Configure Supabase secrets** in `.streamlit/secrets.toml`:
+    ```toml
+    [database]
+    url = "your_supabase_connection_string"
+    ```
+    
+    2. **Or** use the same Supabase from Olympic Planner app (if already configured)
+    
+    For now, you can explore the UI and features with demo data! 🎓
+    """)
+    
+    if st.session_state.get('db_error'):
+        with st.expander("🔍 Technical Error Details"):
+            st.code(st.session_state.db_error)
 
 # Add custom CSS for better UI
 st.markdown("""
