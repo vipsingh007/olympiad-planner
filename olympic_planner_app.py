@@ -1356,84 +1356,332 @@ with tab2:
         st.metric("Overall Progress", f"{overall_pct:.1f}%")
 
 with tab3:
-    st.header("📚 Study Resources & Tips")
+    st.header("📚 Learn Olympiad Topics")
+    st.caption("Complete learning content - no need for external books!")
     
-    resource_subject = st.selectbox("Choose subject:", ["Math", "Science", "English"], key="resource_subject")
+    # Subject and topic selection
+    col_res1, col_res2 = st.columns([1, 2])
     
-    # Study tips by subject
-    if resource_subject == "Math":
-        st.subheader("🔢 Math Olympiad Tips")
-        st.markdown("""
-        **Daily Practice:**
-        - Solve 10 problems daily (mix of easy, medium, hard)
-        - Time yourself - aim for 2-3 minutes per problem
-        - Focus on mental math for speed
-        
-        **Key Areas to Master:**
-        - Number patterns and sequences
-        - Logical reasoning puzzles
-        - Word problems (age, time-distance, etc.)
-        - Geometry and spatial reasoning
-        
-        **Recommended Resources:**
-        - Olympiad Exam preparation books (MTG, Arihant)
-        - Practice papers from previous years
-        - Online: Khan Academy, BYJU'S
-        """)
+    with col_res1:
+        learn_subject = st.selectbox("Choose subject:", ["Math", "Science", "English"], key="learn_subject")
     
-    elif resource_subject == "Science":
-        st.subheader("🔬 Science Olympiad Tips")
-        st.markdown("""
-        **Learning Strategy:**
-        - Understand concepts through experiments
-        - Create mind maps for each chapter
-        - Use diagrams and flowcharts
-        
-        **Key Focus Areas:**
-        - Life Science (plants, animals, human body)
-        - Physical Science (force, energy, light, sound)
-        - Environmental awareness
-        - Scientific reasoning
-        
-        **Recommended Resources:**
-        - NCERT textbooks (foundation)
-        - NSO workbooks
-        - YouTube: ChuChu TV (Grade 3), Byju's Learning (Grade 5)
-        - Science experiments at home
-        """)
-    
-    else:  # English
-        st.subheader("📖 English Olympiad Tips")
-        st.markdown("""
-        **Daily Practice:**
-        - Read for 20 minutes daily (stories, articles)
-        - Learn 5 new words with meanings
-        - Write one paragraph on any topic
-        
-        **Key Areas:**
-        - Reading comprehension (practice answering questions)
-        - Vocabulary building (synonyms, antonyms)
-        - Grammar rules with examples
-        - Sentence formation and correction
-        
-        **Recommended Resources:**
-        - English Olympiad workbooks (Macmillan, Oswaal)
-        - Story books appropriate for age
-        - Online: British Council Kids, Reading Eggs
-        - English newspapers (simple articles)
-        """)
+    with col_res2:
+        if grade in SYLLABUS and learn_subject in SYLLABUS[grade]:
+            learn_topic = st.selectbox(
+                "Choose topic to learn:",
+                SYLLABUS[grade][learn_subject],
+                key="learn_topic"
+            )
+        else:
+            learn_topic = None
+            st.warning("No topics available for this grade/subject")
     
     st.markdown("---")
-    st.subheader("🎯 Mock Test Schedule")
-    st.markdown("""
-    **Monthly Mock Tests:**
-    - Week 1: Math Olympiad (1 hour)
-    - Week 2: Science Olympiad (1 hour)
-    - Week 3: English Olympiad (1 hour)
-    - Week 4: Mixed revision & weak areas
     
-    **Important:** Take tests in exam-like conditions!
-    """)
+    if learn_topic:
+        # Learning content database with examples, strategies, and tips
+        LEARNING_CONTENT = {
+            # MATH TOPICS
+            "Pattern Completion": {
+                "description": "Pattern completion means finding what comes next in a sequence by identifying the rule.",
+                "examples": [
+                    "**Example 1:** 2, 4, 6, 8, ? → Answer: **10** (adding 2 each time)",
+                    "**Example 2:** 1, 4, 9, 16, ? → Answer: **25** (squares: 1², 2², 3², 4², 5²)",
+                    "**Example 3:** A, C, E, G, ? → Answer: **I** (skipping one letter)"
+                ],
+                "strategy": [
+                    "1. Look for the difference between consecutive numbers",
+                    "2. Check if numbers are multiplied or divided",
+                    "3. Look for special sequences (squares, cubes, primes)",
+                    "4. For letter patterns, count positions in alphabet"
+                ],
+                "tips": "Always check the pattern by applying the rule to all given numbers!"
+            },
+            "Coding-Decoding": {
+                "description": "Coding-Decoding is replacing letters or words according to a specific rule to form codes.",
+                "examples": [
+                    "**Example 1:** If CAT = DBU, then DOG = ? → Answer: **EPH** (each letter shifts by +1)",
+                    "**Example 2:** If A=1, B=2, C=3, then CAT = ? → Answer: **3+1+20 = 24**",
+                    "**Example 3:** If BOOK is coded as 'CPPL', then WORD = ? → Answer: **XPSE** (+1 to each letter)"
+                ],
+                "strategy": [
+                    "1. Find the pattern: Is it +1, -1, or reverse?",
+                    "2. Check if numbers are used for letters (A=1, B=2...)",
+                    "3. Look for position changes or substitutions",
+                    "4. Apply the same rule to decode the answer"
+                ],
+                "tips": "Write A-Z with numbers 1-26 to solve quickly!"
+            },
+            "Direction Sense": {
+                "description": "Direction sense involves understanding movements in different directions to find the final position.",
+                "examples": [
+                    "**Example 1:** Ram walks 5m North, then 3m East. How far is he from start? → Answer: **Use Pythagoras: √(5²+3²) ≈ 5.8m**",
+                    "**Example 2:** Facing North, turn right 90°, then left 180°. Which direction now? → Answer: **West**",
+                    "**Example 3:** A is North of B, B is East of C. In which direction is A from C? → Answer: **North-East**"
+                ],
+                "strategy": [
+                    "1. Draw a rough diagram - always helps!",
+                    "2. Remember: Right turn from North = East, Left turn = West",
+                    "3. Use compass directions (N, S, E, W, NE, NW, SE, SW)",
+                    "4. Count degrees: 90° = quarter turn, 180° = half turn, 360° = full circle"
+                ],
+                "tips": "Draw arrows for each move - visual helps solve faster!"
+            },
+            "Blood Relations": {
+                "description": "Blood relations involve finding relationships between family members based on given information.",
+                "examples": [
+                    "**Example 1:** A is B's father, B is C's brother. How is A related to C? → Answer: **Father**",
+                    "**Example 2:** P's mother is Q's daughter. How is P related to Q? → Answer: **Grandson/Granddaughter**",
+                    "**Example 3:** If A + B means A is father of B, A - B means A is mother of B. What does P + Q - R mean? → Answer: **P is grandfather of R**"
+                ],
+                "strategy": [
+                    "1. Draw a family tree diagram",
+                    "2. Mark gender (M/F) to avoid confusion",
+                    "3. Work step by step from one relation to next",
+                    "4. Remember: Sister's son = Nephew, Brother's daughter = Niece"
+                ],
+                "tips": "Make a quick family tree - saves time and reduces errors!"
+            },
+            "Logical Reasoning": {
+                "description": "Logical reasoning uses thinking and analysis to solve problems without direct calculations.",
+                "examples": [
+                    "**Example 1:** All cats are animals. Some animals are pets. Therefore: Some cats are pets → **May or may not be true**",
+                    "**Example 2:** If BRIGHT = DARK opposite, then HOT = ? → Answer: **COLD**",
+                    "**Example 3:** Monday is 3 days after Friday. What day is 2 days before Wednesday? → Answer: **Monday**"
+                ],
+                "strategy": [
+                    "1. Read the question carefully - twice!",
+                    "2. Eliminate clearly wrong options first",
+                    "3. Use logic, not guesswork",
+                    "4. Check your answer by working backwards"
+                ],
+                "tips": "Practice daily - logical thinking improves with regular practice!"
+            },
+            "Series Completion": {
+                "description": "Find the missing term in a number or letter series by identifying the pattern.",
+                "examples": [
+                    "**Example 1:** 3, 6, 12, 24, ? → Answer: **48** (multiply by 2)",
+                    "**Example 2:** 1, 1, 2, 3, 5, 8, ? → Answer: **13** (Fibonacci: add previous two)",
+                    "**Example 3:** Z, Y, X, W, ? → Answer: **V** (reverse alphabetical order)"
+                ],
+                "strategy": [
+                    "1. Check differences: +2, +3, +4... (arithmetic)",
+                    "2. Check ratios: ×2, ×3... (geometric)",
+                    "3. Look for special series (Fibonacci, primes, squares)",
+                    "4. For letters, check forward/backward movement"
+                ],
+                "tips": "Write down the differences between consecutive terms!"
+            },
+            "Odd One Out": {
+                "description": "Find the item that doesn't belong to the group based on a common property.",
+                "examples": [
+                    "**Example 1:** 2, 4, 6, 9, 12 → Answer: **9** (only odd number)",
+                    "**Example 2:** Dog, Cat, Cow, Table → Answer: **Table** (not an animal)",
+                    "**Example 3:** 11, 13, 17, 19, 21 → Answer: **21** (not a prime number)"
+                ],
+                "strategy": [
+                    "1. Find what property 3 items share",
+                    "2. The 4th item lacking that property is the answer",
+                    "3. Check categories: even/odd, prime/composite, living/non-living",
+                    "4. Look for size, shape, or spelling patterns"
+                ],
+                "tips": "First find the similarity, then spot the difference!"
+            },
+            "Mirror Images": {
+                "description": "Mirror image is the reflection of an object as it appears in a mirror.",
+                "examples": [
+                    "**Example 1:** Mirror image of 'b' is **'d'**",
+                    "**Example 2:** Mirror image of 'TAX' is **'XAT'** (horizontally flipped)",
+                    "**Example 3:** Number 12 in mirror looks like: **21** (reversed)"
+                ],
+                "strategy": [
+                    "1. Imagine a vertical mirror on the right side",
+                    "2. Left-right gets swapped, but not up-down",
+                    "3. Letters like A, H, M look same in mirror (symmetric)",
+                    "4. Practice with actual mirror to understand"
+                ],
+                "tips": "Hold this page to a mirror to see how mirror images work!"
+            },
+            "Ranking Test": {
+                "description": "Finding a person's position in a row or group based on given information.",
+                "examples": [
+                    "**Example 1:** Rahul is 7th from left and 12th from right. Total students? → Answer: **7+12-1 = 18**",
+                    "**Example 2:** In a row of 20, Amit is 4th from left. Position from right? → Answer: **20-4+1 = 17th**",
+                    "**Example 3:** 15th from top, 20th from bottom. Total people? → Answer: **15+20-1 = 34**"
+                ],
+                "strategy": [
+                    "1. Formula: Total = Position from left + Position from right - 1",
+                    "2. Position from right = Total - Position from left + 1",
+                    "3. Draw dots for small numbers to visualize",
+                    "4. Remember to subtract 1 (person counted twice)"
+                ],
+                "tips": "Write the formula: L + R - 1 = Total. Memorize it!"
+            },
+            
+            # SCIENCE TOPICS
+            "HOTS Questions": {
+                "description": "Higher Order Thinking Skills questions test deep understanding and application of concepts.",
+                "examples": [
+                    "**Example 1:** Why does ice float on water? → Answer: **Ice is less dense than water**",
+                    "**Example 2:** A plant kept in dark turns yellow. Why? → Answer: **No sunlight = No chlorophyll**",
+                    "**Example 3:** Why do we see lightning before hearing thunder? → Answer: **Light travels faster than sound**"
+                ],
+                "strategy": [
+                    "1. Don't memorize - understand the 'why' behind concepts",
+                    "2. Relate science to everyday observations",
+                    "3. Think about cause and effect",
+                    "4. Apply concepts to new situations"
+                ],
+                "tips": "Always ask 'Why?' and 'What if?' to develop HOTS thinking!"
+            },
+            "Everyday Science": {
+                "description": "Science concepts applied to daily life situations and observations.",
+                "examples": [
+                    "**Example 1:** Why do wet clothes dry faster in sun? → Answer: **Heat increases evaporation**",
+                    "**Example 2:** Why does bread turn brown when toasted? → Answer: **Chemical change due to heat**",
+                    "**Example 3:** Why do we add salt to boiling water? → Answer: **Increases boiling point**"
+                ],
+                "strategy": [
+                    "1. Observe things around you",
+                    "2. Connect classroom concepts to home observations",
+                    "3. Ask parents about how things work",
+                    "4. Read science section in newspapers"
+                ],
+                "tips": "Keep a science diary - write one daily observation!"
+            },
+            
+            # ENGLISH TOPICS
+            "Reading Comprehension": {
+                "description": "Understanding passages and answering questions based on them.",
+                "examples": [
+                    "**Passage:** 'The sun rises in the east. Birds chirp in the morning.'",
+                    "**Q: When do birds chirp?** → Answer: **In the morning**",
+                    "**Q: Where does the sun rise?** → Answer: **In the east**"
+                ],
+                "strategy": [
+                    "1. Read the questions first, then the passage",
+                    "2. Underline key words in questions",
+                    "3. Find answers in passage - don't assume",
+                    "4. Check if answer is directly stated or implied"
+                ],
+                "tips": "Read slowly and carefully - speed comes with practice!"
+            },
+            "Synonyms & Antonyms": {
+                "description": "Synonyms are words with similar meanings. Antonyms have opposite meanings.",
+                "examples": [
+                    "**Synonyms:** Happy = Joyful, Glad, Cheerful",
+                    "**Antonyms:** Happy ↔ Sad, Hot ↔ Cold, Big ↔ Small",
+                    "**Trick:** Fast = Quick (synonym), Fast ↔ Slow (antonym)"
+                ],
+                "strategy": [
+                    "1. Learn word pairs together (hot-cold, up-down)",
+                    "2. Use words in sentences to understand meaning",
+                    "3. Make flashcards with word + meaning + example",
+                    "4. Learn 5 new words daily"
+                ],
+                "tips": "Create your own word dictionary with drawings!"
+            },
+            "Idioms & Phrases": {
+                "description": "Idioms are expressions that don't mean literally what the words say.",
+                "examples": [
+                    "**'A piece of cake'** = Very easy (not about actual cake!)",
+                    "**'Break a leg'** = Good luck (not literally break your leg!)",
+                    "**'Raining cats and dogs'** = Heavy rain"
+                ],
+                "strategy": [
+                    "1. Learn meaning, not literal translation",
+                    "2. Use idioms in your own sentences",
+                    "3. Understand the story/origin behind common idioms",
+                    "4. Practice 2-3 idioms per week"
+                ],
+                "tips": "Make funny drawings to remember idioms - visuals help!"
+            },
+            "Cloze Test": {
+                "description": "Fill in missing words in a passage based on context and grammar.",
+                "examples": [
+                    "**Example:** 'I ___ to school every day.' → Answer: **go** (present tense)",
+                    "**Example:** 'She is ___ than her brother.' → Answer: **taller** (comparative)",
+                    "**Example:** 'They ___ playing in the park.' → Answer: **are** (continuous tense)"
+                ],
+                "strategy": [
+                    "1. Read the full passage first",
+                    "2. Check grammar: verb tense, singular/plural",
+                    "3. Look at words before and after the blank",
+                    "4. The answer should make the sentence meaningful"
+                ],
+                "tips": "Read aloud - if it sounds wrong, it probably is!"
+            }
+        }
+        
+        # Display learning content
+        if learn_topic in LEARNING_CONTENT:
+            content = LEARNING_CONTENT[learn_topic]
+            
+            # Description
+            st.subheader(f"📖 What is {learn_topic}?")
+            st.info(content["description"])
+            
+            # Examples
+            st.subheader("✨ Examples")
+            for example in content["examples"]:
+                st.markdown(example)
+                st.markdown("")
+            
+            # Strategy
+            st.subheader("🎯 How to Solve")
+            for step in content["strategy"]:
+                st.markdown(step)
+            
+            # Tips
+            st.subheader("💡 Pro Tip")
+            st.success(content["tips"])
+            
+            # Practice section
+            st.markdown("---")
+            st.subheader("🏋️ Practice Now!")
+            st.markdown(f"""
+            **Ready to practice {learn_topic}?**
+            1. Go to **Progress Tracker** tab
+            2. Mark this topic as complete when you understand it
+            3. Take a **Quiz** on this topic to test yourself
+            4. Review wrong answers to learn more!
+            """)
+            
+            if st.button("✅ I understand this topic!", type="primary", key="mark_understood"):
+                st.balloons()
+                st.success(f"Great! Now practice {learn_topic} in the Quiz tab to master it!")
+        
+        else:
+            # Generic learning advice for topics not in database
+            st.subheader(f"📚 Learning: {learn_topic}")
+            st.info(f"""
+            **Topic:** {learn_topic}
+            
+            This is an important Olympiad topic. Here's how to learn it:
+            
+            1. **Understand the concept** - Don't just memorize
+            2. **Practice problems** - Solve at least 10 examples
+            3. **Learn tricks** - Look for shortcuts and patterns
+            4. **Test yourself** - Take quizzes to check understanding
+            
+            💡 **Tip:** Search for "{learn_topic} for Olympiad" online for more examples and practice problems!
+            """)
+    
+    st.markdown("---")
+    
+    # Quick reference guide
+    with st.expander("📋 Quick Reference - All Topics Summary"):
+        st.markdown(f"""
+        **Your Grade:** {grade}
+        
+        **Math Topics ({len(SYLLABUS[grade]['Math'])}):** {', '.join(SYLLABUS[grade]['Math'][:5])}...
+        
+        **Science Topics ({len(SYLLABUS[grade]['Science'])}):** {', '.join(SYLLABUS[grade]['Science'][:5])}...
+        
+        **English Topics ({len(SYLLABUS[grade]['English'])}):** {', '.join(SYLLABUS[grade]['English'][:5])}...
+        
+        💡 **Study Plan:** Learn 1-2 topics per week, practice daily, take weekly quizzes!
+        """)
 
 with tab4:
     st.header(f"🎯 Knowledge Quiz - {name}")
