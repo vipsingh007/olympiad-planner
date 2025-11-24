@@ -275,12 +275,30 @@ if user_type == "admin":
     with admin_tab1:
         st.header("📅 Schedule New Class")
         
+        # Fetch available teachers
+        try:
+            teachers = db.get_all_teachers()
+            if not teachers:
+                st.warning("⚠️ No teachers registered yet! Please ask teachers to sign up first.")
+                st.info("Teachers can sign up on the login page → Teacher Login → Sign Up")
+        except Exception as e:
+            st.error(f"Error loading teachers: {str(e)}")
+            teachers = []
+        
         col1, col2 = st.columns(2)
         
         with col1:
             class_title = st.text_input("Class Title", placeholder="e.g., Python Programming for Beginners")
             class_subject = st.selectbox("Subject", ["Mathematics", "Science", "English", "Coding", "Art", "Music"])
-            class_teacher = st.selectbox("Assign Teacher", ["Dr. Amit Kumar", "Prof. Priya Sharma", "Mr. Rahul Verma"])
+            
+            if teachers:
+                teacher_options = {f"{t['name']} ({t['email']})": t['id'] for t in teachers}
+                selected_teacher = st.selectbox("Assign Teacher", list(teacher_options.keys()))
+                teacher_id = teacher_options[selected_teacher]
+            else:
+                st.info("No teachers available - class will be created without teacher assignment")
+                teacher_id = None
+            
             class_grade = st.multiselect("Target Grades", ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"])
         
         with col2:
@@ -294,24 +312,29 @@ if user_type == "admin":
         
         if st.button("📅 Schedule Class", type="primary"):
             if class_title and class_description and class_date and class_time:
-                try:
-                    # Save to database
-                    class_id = db.schedule_class(
-                        title=class_title,
-                        description=class_description,
-                        subject=class_subject,
-                        grade=", ".join(class_grade) if class_grade else "All Grades",
-                        teacher_id=1,  # TODO: Get actual teacher ID
-                        class_date=class_date,
-                        class_time=class_time,
-                        duration_minutes=class_duration,
-                        max_students=max_students,
-                        price=class_price
-                    )
-                    st.success(f"✅ Class '{class_title}' scheduled successfully! (ID: {class_id})")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"Failed to schedule class: {str(e)}")
+                if teacher_id is None and teachers:
+                    st.error("Please select a teacher")
+                elif not teachers:
+                    st.error("Cannot schedule class - no teachers registered yet")
+                else:
+                    try:
+                        # Save to database
+                        class_id = db.schedule_class(
+                            title=class_title,
+                            description=class_description,
+                            subject=class_subject,
+                            grade=", ".join(class_grade) if class_grade else "All Grades",
+                            teacher_id=teacher_id,
+                            class_date=class_date,
+                            class_time=class_time,
+                            duration_minutes=class_duration,
+                            max_students=max_students,
+                            price=class_price
+                        )
+                        st.success(f"✅ Class '{class_title}' scheduled successfully! (ID: {class_id})")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Failed to schedule class: {str(e)}")
             else:
                 st.error("Please fill in all required fields")
         

@@ -1054,6 +1054,15 @@ def create_gyaan_user(email, password, name, user_type, phone=None, grade=None):
             (email.lower(), password_hash, name, user_type, phone, grade)
         )
         user_id = cur.fetchone()['id']
+        
+        # If user is a teacher, also create teacher profile
+        if user_type == 'teacher':
+            cur.execute(
+                """INSERT INTO gyaan_teachers (user_id, subjects, bio)
+                   VALUES (%s, %s, %s) RETURNING id""",
+                (user_id, ['General'], 'New teacher on Online Gyaan')
+            )
+        
         conn.commit()
         cur.close()
         
@@ -1251,6 +1260,30 @@ def get_class_students(class_id):
         cur.close()
         
         return [dict(s) for s in students]
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_teachers():
+    """Get all registered teachers"""
+    conn = None
+    try:
+        conn = get_gyaan_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT t.id, t.user_id, u.name, u.email, t.subjects, t.bio, 
+                   t.rating, t.total_classes, t.total_students
+            FROM gyaan_teachers t
+            JOIN gyaan_users u ON t.user_id = u.id
+            WHERE u.is_active = TRUE
+            ORDER BY u.name
+        """)
+        
+        teachers = cur.fetchall()
+        cur.close()
+        
+        return [dict(t) for t in teachers]
     finally:
         if conn:
             conn.close()
