@@ -3,3 +3,5 @@ openai
 audio-recorder-streamlit
 psycopg2-binary
 sqlalchemy
+bcrypt
+email-validator

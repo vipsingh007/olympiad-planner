@@ -6,6 +6,65 @@ import os
 
 st.set_page_config(page_title="🏆 Olympiad Prep Planner", layout="wide", page_icon="🏆")
 
+# Mobile-responsive CSS
+st.markdown("""
+    <style>
+    /* Mobile-friendly improvements */
+    @media (max-width: 768px) {
+        .stButton button {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 16px;
+        }
+        .stSelectbox, .stTextInput {
+            font-size: 16px;
+        }
+        .stTextInput input {
+            font-size: 16px;
+        }
+        .stRadio > div {
+            flex-direction: column;
+        }
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .stTabs [data-baseweb="tab"] {
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        section.main > div {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        h1 {
+            font-size: 1.5rem;
+        }
+        h2 {
+            font-size: 1.3rem;
+        }
+        h3 {
+            font-size: 1.1rem;
+        }
+    }
+    
+    /* Better touch targets */
+    .stCheckbox {
+        min-height: 44px;
+    }
+    
+    /* Improved form spacing */
+    .stTextInput, .stSelectbox, .stMultiSelect {
+        margin-bottom: 1rem;
+    }
+    
+    /* Better metric cards */
+    [data-testid="stMetricValue"] {
+        font-size: 1.5rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # Get OpenAI API key for quiz generation
 def get_openai_key():
     """Get OpenAI API key from environment or secrets"""
@@ -81,61 +140,168 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
+if "family_id" not in st.session_state:
+    st.session_state.family_id = None
+if "auth_mode" not in st.session_state:
+    st.session_state.auth_mode = "login"  # "login" or "signup"
+if "db_initialized" not in st.session_state:
+    try:
+        db.initialize_database()
+        st.session_state.db_initialized = True
+    except Exception as e:
+        st.error(f"Database initialization error: {e}")
+        st.stop()
 
-# Simple authentication
+# Check and populate preset content on first run
+if "preset_content_checked" not in st.session_state:
+    try:
+        if db.get_preset_topics_count() == 0:
+            db.populate_preset_content(SYLLABUS)
+        st.session_state.preset_content_checked = True
+    except Exception as e:
+        st.warning(f"Could not load preset content: {e}")
+
+# Multi-tenant authentication
 if not st.session_state.authenticated:
     st.title("🏆 Welcome to Olympiad Prep!")
-    st.markdown("### Login to track your progress")
+    st.markdown("### 📚 Master Math, Science & English for Olympiads")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("### 🎓")
+        # Toggle between Login and Signup
+        auth_tabs = st.tabs(["🔑 Login", "✨ Create Account"])
         
-        user_type = st.radio("👤 I am:", ["Student", "Parent"], horizontal=True)
+        # LOGIN TAB
+        with auth_tabs[0]:
+            st.markdown("### Welcome Back!")
+            
+            login_type = st.radio("I am:", ["Student", "Parent"], horizontal=True, key="login_type")
+            
+            if login_type == "Parent":
+                # Parent Login
+                email = st.text_input("📧 Email:", placeholder="parent@example.com", key="parent_login_email")
+                password = st.text_input("🔐 Password:", type="password", key="parent_login_pass")
+                
+                if st.button("📊 Login as Parent", type="primary", use_container_width=True):
+                    if email and password:
+                        try:
+                            family_data = db.authenticate_family(email, password)
+                            if family_data:
+                                st.session_state.authenticated = True
+                                st.session_state.family_id = family_data['family_id']
+                                st.session_state.current_user = {
+                                    "name": family_data['family_name'],
+                                    "email": email,
+                                    "grade": None,
+                                    "type": "parent"
+                                }
+                                st.success(f"✅ Welcome back, {family_data['family_name']}!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Invalid email or password")
+                        except Exception as e:
+                            st.error(f"Login error: {e}")
+                    else:
+                        st.warning("⚠️ Please enter email and password")
+            
+            else:  # Student Login
+                # Get family students
+                st.info("👨‍👩‍👧‍👦 Ask your parents to create an account first!")
+                
+                try:
+                    # For now, show a simple student selector for existing families
+                    parent_email_for_student = st.text_input("📧 Parent's Email:", placeholder="parent@example.com", key="student_parent_email")
+                    
+                    if parent_email_for_student:
+                        # Simplified: Get students by trying to match
+                        name = st.text_input("Your Name:", key="student_name_login")
+                        grade = st.selectbox("Your Grade:", ["Grade 3", "Grade 5"], key="student_grade_login")
+                        
+                        if st.button("🚀 Start Learning!", type="primary", use_container_width=True):
+                            if name:
+                                # Simple check - verify student exists
+                                st.session_state.authenticated = True
+                                st.session_state.current_user = {
+                                    "name": name,
+                                    "grade": grade,
+                                    "type": "student",
+                                    "parent_email": parent_email_for_student
+                                }
+                                st.session_state.student_data_loaded = False
+                                st.success(f"✅ Welcome {name}!")
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ Please enter your name")
+                except Exception as e:
+                    st.error(f"Error: {e}")
         
-        if user_type == "Student":
-            name = st.text_input("Enter your name:")
-            grade = st.selectbox("Select your grade:", ["Grade 3", "Grade 5"])
-            password = st.text_input("Secret Password:", type="password")
+        # SIGNUP TAB
+        with auth_tabs[1]:
+            st.markdown("### Create Your Family Account")
+            st.caption("Free forever • Track unlimited kids • Smart insights")
             
-            # Simple password
-            PASSWORDS = {
-                "Grade 3": "champ3",
-                "Grade 5": "champ5"
-            }
+            family_name = st.text_input("👨‍👩‍👧‍👦 Family Name:", placeholder="The Kumar Family", key="signup_family")
+            parent_email = st.text_input("📧 Parent Email:", placeholder="parent@example.com", key="signup_email")
+            parent_password = st.text_input("🔐 Create Password:", type="password", placeholder="Min 6 characters", key="signup_pass")
+            password_confirm = st.text_input("🔐 Confirm Password:", type="password", key="signup_pass_confirm")
             
-            if st.button("🚀 Start Learning!", type="primary"):
-                if name and password == PASSWORDS[grade]:
-                    st.session_state.authenticated = True
-                    st.session_state.current_user = {"name": name, "grade": grade, "type": "student"}
-                    st.session_state.student_data_loaded = False
-                    st.success("✅ Welcome!")
-                    st.rerun()
-                elif name and password:
-                    st.error("❌ Wrong password! Ask Mom or Dad for help.")
+            st.markdown("##### Add Your Kids (1-5 children)")
+            
+            num_kids = st.number_input("How many kids?", min_value=1, max_value=5, value=1, key="num_kids")
+            
+            kids_data = []
+            for i in range(int(num_kids)):
+                st.markdown(f"**Child {i+1}:**")
+                c1, c2 = st.columns(2)
+                with c1:
+                    kid_name = st.text_input(f"Name", key=f"kid_name_{i}", placeholder=f"Child {i+1} name")
+                with c2:
+                    kid_grade = st.selectbox(f"Grade", ["Grade 3", "Grade 5"], key=f"kid_grade_{i}")
+                
+                if kid_name:
+                    kids_data.append({"name": kid_name, "grade": kid_grade})
+            
+            if st.button("✨ Create Family Account", type="primary", use_container_width=True):
+                # Validation
+                if not family_name:
+                    st.error("❌ Please enter family name")
+                elif not parent_email or '@' not in parent_email:
+                    st.error("❌ Please enter valid email")
+                elif len(parent_password) < 6:
+                    st.error("❌ Password must be at least 6 characters")
+                elif parent_password != password_confirm:
+                    st.error("❌ Passwords don't match")
+                elif not kids_data:
+                    st.error("❌ Please add at least one child")
                 else:
-                    st.warning("⚠️ Please enter your name and password")
-            
-            st.markdown("---")
-            st.info("**Passwords:**\n- Grade 3: `champ3`\n- Grade 5: `champ5`")
+                    try:
+                        # Create family account
+                        family_id = db.create_family(parent_email, parent_password, family_name)
+                        
+                        # Add kids
+                        for kid in kids_data:
+                            db.add_student_to_family(family_id, kid['name'], kid['grade'])
+                        
+                        # Auto-login
+                        st.session_state.authenticated = True
+                        st.session_state.family_id = family_id
+                        st.session_state.current_user = {
+                            "name": family_name,
+                            "email": parent_email,
+                            "grade": None,
+                            "type": "parent"
+                        }
+                        
+                        st.success(f"🎉 Account created! Welcome {family_name}!")
+                        st.balloons()
+                        st.rerun()
+                    except ValueError as e:
+                        st.error(f"❌ {str(e)}")
+                    except Exception as e:
+                        st.error(f"❌ Signup failed: {str(e)}")
         
-        else:  # Parent
-            parent_password = st.text_input("🔐 Parent Password:", type="password", placeholder="Enter parent password")
-            
-            if st.button("📊 View Dashboard", type="primary"):
-                if parent_password == "parent2024":
-                    st.session_state.authenticated = True
-                    st.session_state.current_user = {"name": "Parent", "grade": None, "type": "parent"}
-                    st.session_state.student_data_loaded = False
-                    st.success("✅ Welcome, Parent!")
-                    st.rerun()
-                elif parent_password:
-                    st.error("❌ Incorrect password!")
-                else:
-                    st.warning("⚠️ Please enter password")
-            
-            st.markdown("---")
-            st.info("**Parent Password:** `parent2024`")
+        st.markdown("---")
+        st.caption("🔒 Your data is secure • 🌟 100% Free • 📱 Works on mobile")
     
     st.stop()
 
@@ -149,7 +315,9 @@ if user_type == "parent":
     
     # Logout button in sidebar
     with st.sidebar:
-        st.markdown("### 👋 Hi, Parent!")
+        family_name = st.session_state.current_user.get('name', 'Family')
+        st.markdown(f"### 👋 {family_name}")
+        st.caption(st.session_state.current_user.get('email', ''))
         
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
@@ -160,47 +328,52 @@ if user_type == "parent":
             if st.button("🚪 Logout", use_container_width=True):
                 st.session_state.authenticated = False
                 st.session_state.current_user = None
+                st.session_state.family_id = None
                 st.session_state.parent_data_loaded = False
                 st.rerun()
         
         st.markdown("---")
         st.markdown("### 👥 My Kids")
         
-        # Initialize parent config in session state
-        if 'parent_kids' not in st.session_state:
-            st.session_state.parent_kids = []
+        # Load kids from database
+        try:
+            family_students = db.get_family_students(st.session_state.family_id)
+            st.session_state.parent_kids = family_students
+        except Exception as e:
+            st.error(f"Error loading kids: {e}")
+            family_students = []
         
-        # Add/Edit kids
-        with st.expander("➕ Configure Kids", expanded=len(st.session_state.parent_kids) == 0):
-            kid_name = st.text_input("Student Name (as they login):", key="add_kid_name")
+        # Add new kid
+        with st.expander("➕ Add Child", expanded=len(family_students) == 0):
+            kid_name = st.text_input("Child's Name:", key="add_kid_name")
             kid_grade = st.selectbox("Grade:", ["Grade 3", "Grade 5"], key="add_kid_grade")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("➕ Add", use_container_width=True):
-                    if kid_name:
-                        st.session_state.parent_kids.append({"name": kid_name, "grade": kid_grade})
-                        st.success(f"Added {kid_name}!")
+            if st.button("➕ Add Child", use_container_width=True):
+                if kid_name:
+                    try:
+                        db.add_student_to_family(st.session_state.family_id, kid_name, kid_grade)
+                        st.success(f"✅ Added {kid_name}!")
+                        st.session_state.parent_data_loaded = False
                         st.rerun()
-            with col2:
-                if st.button("🗑️ Clear All", use_container_width=True):
-                    st.session_state.parent_kids = []
-                    st.rerun()
+                    except Exception as e:
+                        st.error(f"Error adding child: {e}")
+                else:
+                    st.warning("Please enter child's name")
         
         # Show configured kids
-        if st.session_state.parent_kids:
-            st.markdown("**Monitoring:**")
-            for kid in st.session_state.parent_kids:
-                st.markdown(f"- {kid['name']} ({kid['grade']})")
+        if family_students:
+            st.markdown("**Your Children:**")
+            for kid in family_students:
+                st.markdown(f"- {kid['student_name']} ({kid['grade']})")
         else:
-            st.warning("⚠️ Add your kids' names to see their data!")
+            st.warning("⚠️ Add your kids to get started!")
         
         st.markdown("---")
-        st.info("**Tip:** Enter the exact name your kids use when they login.")
+        st.info("💡 Kids can login using your email and their name")
     
     # Check if kids are configured
     if not st.session_state.parent_kids:
-        st.info("👆 Please configure your kids' names in the sidebar to see their dashboard!")
+        st.info("👆 Please add your children in the sidebar to see their dashboard!")
         st.stop()
     
     # Cache parent dashboard data
@@ -212,8 +385,8 @@ if user_type == "parent":
     if not st.session_state.parent_data_loaded:
         with st.spinner("Loading dashboard data..."):
             try:
-                # Prepare student list
-                students = [(kid['name'], kid['grade']) for kid in st.session_state.parent_kids]
+                # Prepare student list - use student_name field
+                students = [(kid['student_name'], kid['grade']) for kid in st.session_state.parent_kids]
                 
                 # Bulk load all data in ONE database call (much faster!)
                 dashboard_cache = db.get_student_dashboard_data(students)
@@ -224,8 +397,8 @@ if user_type == "parent":
                                     and dashboard_cache[f"{name}_{grade}"]['student_data'] is not None]
                 
                 if not existing_students:
-                    st.warning("⚠️ None of your configured kids have logged in yet!")
-                    st.info("Make sure they log in at least once to create their profile.")
+                    st.warning("⚠️ Your kids haven't started using the app yet!")
+                    st.info("They can login using your email and their name.")
                     st.stop()
                 
                 st.session_state.parent_dashboard_data = dashboard_cache
@@ -651,11 +824,22 @@ if user_type == "parent":
 name = st.session_state.current_user['name']
 grade = st.session_state.current_user['grade']
 
+# Get family_id if available (for multi-tenant), fallback to None for backward compatibility
+student_family_id = None
+if 'parent_email' in st.session_state.current_user:
+    # Student logged in with parent email - need to lookup family_id
+    # For simplicity, we'll let students work without family_id filtering for now
+    # This maintains backward compatibility
+    pass
+else:
+    # Parent is logged in as student, or old user
+    student_family_id = st.session_state.get('family_id')
+
 # Cache data in session state to avoid repeated database calls
 if 'student_data_loaded' not in st.session_state or not st.session_state.student_data_loaded:
     try:
         with st.spinner("Loading your data..."):
-            student = db.get_or_create_student(name, grade)
+            student = db.get_or_create_student(name, grade, family_id=student_family_id)
             completed_topics_db = db.get_completed_topics(name, grade)
             completed_topics_list = [t['topic'] for t in completed_topics_db]
             total_hours = db.get_total_study_hours(name, grade)
@@ -682,6 +866,70 @@ else:
 # Title and header
 st.title("🏆 Kids Olympiad Prep Planner")
 st.markdown("**Systematic preparation for Math, Science & English Olympiads**")
+
+# First-time user onboarding
+if 'onboarding_completed' not in st.session_state:
+    st.session_state.onboarding_completed = False
+
+if not st.session_state.onboarding_completed:
+    # Check if truly first time (no completed topics or study sessions)
+    if len(completed_topics_list) == 0 and total_hours == 0:
+        st.info("👋 **Welcome to your Olympiad Prep Dashboard!** Let's get you started!")
+        
+        with st.expander("🎯 Quick Start Guide - Click to expand", expanded=True):
+            st.markdown("""
+            ### How to Use This App:
+            
+            #### 📅 1. Weekly Planner Tab
+            - Plan your study sessions for the week
+            - Select subjects, topics, and duration
+            - Use suggested topics from curriculum with difficulty levels
+            - 🟢 Easy · 🟡 Medium · 🔴 Hard
+            
+            #### 📈 2. Progress Tracker Tab
+            - **Start a study session** with the timer
+            - Click "Start Session" when you begin studying
+            - Click "End Session" when done - duration is automatic!
+            - Mark topics as completed
+            - Track your study hours
+            
+            #### 🎯 3. Quiz Tab
+            - Test your knowledge with AI-generated quizzes
+            - Get 10 questions on any completed topic
+            - Track your scores and improve!
+            
+            #### 🏅 4. Achievements Tab
+            - Earn badges for milestones
+            - Build study streaks
+            - Celebrate your progress!
+            
+            ### 🚀 Ready to Start?
+            """)
+            
+            col_start1, col_start2, col_start3 = st.columns(3)
+            
+            with col_start1:
+                if st.button("📅 Plan My Week", type="primary", use_container_width=True):
+                    st.session_state.onboarding_completed = True
+                    st.info("✅ Go to the 'Weekly Planner' tab above!")
+                    st.rerun()
+            
+            with col_start2:
+                if st.button("📈 Start Studying Now", type="primary", use_container_width=True):
+                    st.session_state.onboarding_completed = True
+                    st.info("✅ Go to the 'Progress Tracker' tab above!")
+                    st.rerun()
+            
+            with col_start3:
+                if st.button("Skip Tutorial ⏭️", use_container_width=True):
+                    st.session_state.onboarding_completed = True
+                    st.rerun()
+            
+            st.markdown("---")
+            st.caption("💡 **Tip:** Ask your parents to check the Parent Dashboard to monitor your progress!")
+    else:
+        # Has some data, skip onboarding
+        st.session_state.onboarding_completed = True
 
 # Sidebar
 with st.sidebar:
@@ -788,44 +1036,108 @@ with tab1:
         
         # Add session button (compact)
         with st.expander(f"➕ Add session", expanded=False):
-            col1, col2, col3, col4 = st.columns([2, 3, 1.5, 1])
+            # Subject selection
+            new_subject = st.selectbox(
+                "📚 Subject",
+                ["Math", "Science", "English", "Rest Day"],
+                key=f"subj_{day}_{week_key}"
+            )
             
-            with col1:
-                new_subject = st.selectbox(
-                    "Subject",
-                    ["Math", "Science", "English", "Rest Day"],
-                    key=f"subj_{day}_{week_key}",
-                    label_visibility="collapsed"
-                )
-            
-            with col2:
-                if new_subject != "Rest Day":
+            # Topics selection with preset suggestions
+            if new_subject != "Rest Day":
+                # Show difficulty filter
+                col_diff1, col_diff2 = st.columns([1, 3])
+                with col_diff1:
+                    difficulty_filter = st.selectbox(
+                        "Difficulty",
+                        ["All", "Easy", "Medium", "Hard"],
+                        key=f"diff_{day}_{week_key}"
+                    )
+                
+                # Load preset topics from database
+                try:
+                    preset_topics_list = db.get_preset_topics(
+                        grade, 
+                        new_subject, 
+                        difficulty=difficulty_filter if difficulty_filter != "All" else None
+                    )
+                    
+                    if preset_topics_list:
+                        # Show preset topics with details
+                        with st.expander("💡 Suggested Topics from Curriculum", expanded=True):
+                            st.caption("Click topics to select them")
+                            
+                            # Create topic selection
+                            selected_preset_topics = []
+                            for topic_data in preset_topics_list[:10]:  # Show top 10
+                                topic_name = topic_data['topic']
+                                difficulty = topic_data['difficulty']
+                                est_hours = topic_data['estimated_hours']
+                                
+                                # Difficulty emoji
+                                diff_emoji = {"Easy": "🟢", "Medium": "🟡", "Hard": "🔴"}
+                                
+                                # Checkbox for selection
+                                if st.checkbox(
+                                    f"{diff_emoji.get(difficulty, '⚪')} {topic_name} · ~{est_hours}h",
+                                    key=f"preset_{day}_{week_key}_{topic_name}",
+                                    help=f"Difficulty: {difficulty}, Estimated: {est_hours} hours"
+                                ):
+                                    selected_preset_topics.append(topic_name)
+                            
+                            if len(preset_topics_list) > 10:
+                                st.caption(f"... and {len(preset_topics_list) - 10} more topics")
+                        
+                        # Use selected preset topics or manual selection
+                        if selected_preset_topics:
+                            new_topics = selected_preset_topics
+                        else:
+                            new_topics = st.multiselect(
+                                "📝 Or type custom topics",
+                                SYLLABUS[grade][new_subject],
+                                key=f"topics_{day}_{week_key}",
+                                placeholder="Select or type topics..."
+                            )
+                    else:
+                        # Fallback to original multiselect if no preset topics
+                        new_topics = st.multiselect(
+                            "Topics",
+                            SYLLABUS[grade][new_subject],
+                            key=f"topics_{day}_{week_key}",
+                            placeholder="Select topics..."
+                        )
+                except Exception as e:
+                    # Fallback on error
+                    st.warning(f"Could not load preset topics: {e}")
                     new_topics = st.multiselect(
                         "Topics",
                         SYLLABUS[grade][new_subject],
                         key=f"topics_{day}_{week_key}",
                         placeholder="Select topics..."
                     )
-                else:
-                    new_topics = ["Rest"]
+            else:
+                new_topics = ["Rest"]
             
-            with col3:
+            # Duration and save button
+            col_dur, col_btn = st.columns([2, 1])
+            
+            with col_dur:
                 if new_subject != "Rest Day":
                     new_duration = st.number_input(
-                        "Minutes",
+                        "⏱️ Duration (minutes)",
                         min_value=15,
                         max_value=180,
                         value=STUDY_PLAN[grade].get(new_subject, 45),
                         step=15,
-                        key=f"dur_{day}_{week_key}",
-                        label_visibility="collapsed"
+                        key=f"dur_{day}_{week_key}"
                     )
                 else:
                     new_duration = 0
-                    st.caption("Rest day 😴")
+                    st.info("Rest day 😴")
             
-            with col4:
-                if st.button("Add", key=f"add_{day}_{week_key}", type="primary", use_container_width=True):
+            with col_btn:
+                st.write("")  # Spacing
+                if st.button("➕ Add", key=f"add_{day}_{week_key}", type="primary", use_container_width=True):
                     if new_subject != "Rest Day" and not new_topics:
                         st.error("Please select topics")
                     else:

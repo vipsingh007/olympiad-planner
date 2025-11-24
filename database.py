@@ -3,6 +3,8 @@ from psycopg2.extras import RealDictCursor
 import streamlit as st
 from datetime import datetime
 import time
+import bcrypt
+import re
 
 # Database connection with retry logic
 def get_db_connection():
@@ -23,24 +25,283 @@ def get_db_connection():
             else:
                 raise Exception(f"Database connection failed: {str(e)}")
 
-# Student operations
-def get_or_create_student(name, grade):
-    """Get student or create if doesn't exist"""
+def initialize_database():
+    """Initialize all database tables including multi-tenant support"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Create families table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS families (
+                family_id SERIAL PRIMARY KEY,
+                family_name VARCHAR(100),
+                parent_email VARCHAR(255) UNIQUE NOT NULL,
+                parent_password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Create students table (if not exists)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS students (
+                id SERIAL PRIMARY KEY,
+                student_name VARCHAR(100) NOT NULL,
+                grade VARCHAR(20) NOT NULL,
+                total_hours DECIMAL DEFAULT 0,
+                streak_days INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Add family_id to students table if it doesn't exist
+        cur.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='students' AND column_name='family_id'
+                ) THEN
+                    ALTER TABLE students ADD COLUMN family_id INTEGER REFERENCES families(family_id);
+                END IF;
+            END $$;
+        """)
+        
+        # Create completed_topics table (if not exists)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS completed_topics (
+                id SERIAL PRIMARY KEY,
+                student_name VARCHAR(100),
+                grade VARCHAR(20),
+                topic TEXT,
+                subject VARCHAR(50),
+                completed_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Create study_sessions table (if not exists)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS study_sessions (
+                id SERIAL PRIMARY KEY,
+                student_name VARCHAR(100),
+                grade VARCHAR(20),
+                subject VARCHAR(50),
+                topics TEXT,
+                duration_minutes INTEGER,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Create weekly_plans table (if not exists)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS weekly_plans (
+                id SERIAL PRIMARY KEY,
+                student_name VARCHAR(100),
+                grade VARCHAR(20),
+                week_start DATE,
+                day_of_week VARCHAR(20),
+                subjects TEXT[],
+                topics TEXT[],
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(student_name, grade, week_start, day_of_week)
+            )
+        """)
+        
+        # Create quiz_results table (if not exists)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS quiz_results (
+                id SERIAL PRIMARY KEY,
+                student_name VARCHAR(100),
+                grade VARCHAR(20),
+                subject VARCHAR(50),
+                score INTEGER,
+                num_questions INTEGER,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Create preset_topics table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS preset_topics (
+                id SERIAL PRIMARY KEY,
+                grade VARCHAR(20),
+                subject VARCHAR(50),
+                topic TEXT,
+                difficulty VARCHAR(20),
+                estimated_hours DECIMAL,
+                description TEXT
+            )
+        """)
+        
+        # Create mock_tests table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS mock_tests (
+                id SERIAL PRIMARY KEY,
+                grade VARCHAR(20),
+                subject VARCHAR(50),
+                test_name TEXT,
+                questions JSONB,
+                difficulty VARCHAR(20)
+            )
+        """)
+        
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise Exception(f"Database initialization failed: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
+# Authentication operations
+def create_family(email, password, family_name):
+    """Create a new family account"""
+    conn = None
+    try:
+        # Validate email
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, email):
+            raise ValueError("Invalid email format")
+        
+        # Validate password
+        if len(password) < 6:
+            raise ValueError("Password must be at least 6 characters")
+        
+        # Hash password
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            "INSERT INTO families (parent_email, parent_password_hash, family_name) VALUES (%s, %s, %s) RETURNING family_id",
+            (email.lower(), password_hash, family_name)
+        )
+        family_id = cur.fetchone()['family_id']
+        conn.commit()
+        cur.close()
+        
+        return family_id
+    except psycopg2.errors.UniqueViolation:
+        raise ValueError("Email already registered")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise Exception(f"Failed to create family: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
+def authenticate_family(email, password):
+    """Authenticate family login"""
     conn = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         
         cur.execute(
-            "SELECT * FROM students WHERE student_name = %s AND grade = %s",
-            (name, grade)
+            "SELECT family_id, parent_password_hash, family_name FROM families WHERE parent_email = %s",
+            (email.lower(),)
         )
+        result = cur.fetchone()
+        cur.close()
+        
+        if not result:
+            return None
+        
+        # Verify password
+        if bcrypt.checkpw(password.encode('utf-8'), result['parent_password_hash'].encode('utf-8')):
+            return {
+                'family_id': result['family_id'],
+                'family_name': result['family_name'],
+                'email': email
+            }
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def get_family_students(family_id):
+    """Get all students for a family"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            "SELECT DISTINCT student_name, grade FROM students WHERE family_id = %s ORDER BY grade, student_name",
+            (family_id,)
+        )
+        students = cur.fetchall()
+        cur.close()
+        
+        return [dict(s) for s in students]
+    finally:
+        if conn:
+            conn.close()
+
+def add_student_to_family(family_id, student_name, grade):
+    """Add a student to a family"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if student already exists for this family
+        cur.execute(
+            "SELECT id FROM students WHERE student_name = %s AND grade = %s AND family_id = %s",
+            (student_name, grade, family_id)
+        )
+        existing = cur.fetchone()
+        
+        if existing:
+            cur.close()
+            return existing['id']
+        
+        # Add new student
+        cur.execute(
+            "INSERT INTO students (student_name, grade, family_id) VALUES (%s, %s, %s) RETURNING id",
+            (student_name, grade, family_id)
+        )
+        student_id = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        
+        return student_id
+    finally:
+        if conn:
+            conn.close()
+
+# Student operations
+def get_or_create_student(name, grade, family_id=None):
+    """Get student or create if doesn't exist"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        if family_id:
+            cur.execute(
+                "SELECT * FROM students WHERE student_name = %s AND grade = %s AND family_id = %s",
+                (name, grade, family_id)
+            )
+        else:
+            # Backward compatibility for existing users without family_id
+            cur.execute(
+                "SELECT * FROM students WHERE student_name = %s AND grade = %s AND family_id IS NULL",
+                (name, grade)
+            )
         student = cur.fetchone()
         
         if not student:
             cur.execute(
-                "INSERT INTO students (student_name, grade) VALUES (%s, %s) RETURNING *",
-                (name, grade)
+                "INSERT INTO students (student_name, grade, family_id) VALUES (%s, %s, %s) RETURNING *",
+                (name, grade, family_id)
             )
             student = cur.fetchone()
             conn.commit()
@@ -492,6 +753,111 @@ def get_student_dashboard_data(student_list):
         cur.close()
         return result
         
+    finally:
+        if conn:
+            conn.close()
+
+# Preset content operations
+def populate_preset_content(syllabus_data):
+    """Populate preset topics from syllabus data (one-time operation)"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if already populated
+        cur.execute("SELECT COUNT(*) as count FROM preset_topics")
+        result = cur.fetchone()
+        if result['count'] > 0:
+            cur.close()
+            return False  # Already populated
+        
+        # Define difficulty and estimated hours for topics
+        difficulty_mapping = {
+            "Grade 3": {
+                "Math": ["Easy", "Easy", "Medium", "Medium", "Medium", "Easy", "Medium", "Easy", "Easy", "Medium", "Easy", "Medium"],
+                "Science": ["Easy", "Easy", "Easy", "Easy", "Medium", "Medium", "Easy", "Medium", "Medium", "Medium", "Medium", "Easy"],
+                "English": ["Medium", "Easy", "Medium", "Easy", "Medium", "Easy", "Medium", "Hard", "Easy", "Medium", "Easy", "Easy"]
+            },
+            "Grade 5": {
+                "Math": ["Medium", "Medium", "Medium", "Hard", "Medium", "Medium", "Medium", "Hard", "Medium", "Medium", "Medium", "Medium", "Medium", "Hard", "Hard", "Hard"],
+                "Science": ["Medium", "Medium", "Medium", "Hard", "Hard", "Medium", "Medium", "Medium", "Medium", "Hard", "Medium", "Medium", "Hard", "Medium", "Medium", "Medium"],
+                "English": ["Hard", "Medium", "Medium", "Hard", "Hard", "Hard", "Medium", "Hard", "Hard", "Medium", "Medium", "Hard", "Hard", "Hard"]
+            }
+        }
+        
+        hours_mapping = {
+            "Easy": 1.0,
+            "Medium": 1.5,
+            "Hard": 2.0
+        }
+        
+        # Insert topics
+        for grade, subjects in syllabus_data.items():
+            for subject, topics in subjects.items():
+                difficulties = difficulty_mapping.get(grade, {}).get(subject, ["Medium"] * len(topics))
+                for i, topic in enumerate(topics):
+                    difficulty = difficulties[i] if i < len(difficulties) else "Medium"
+                    estimated_hours = hours_mapping.get(difficulty, 1.5)
+                    
+                    cur.execute(
+                        """INSERT INTO preset_topics (grade, subject, topic, difficulty, estimated_hours)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        (grade, subject, topic, difficulty, estimated_hours)
+                    )
+        
+        conn.commit()
+        cur.close()
+        return True  # Successfully populated
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise Exception(f"Failed to populate preset content: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_preset_topics(grade, subject=None, difficulty=None):
+    """Get preset topics filtered by grade, subject, and/or difficulty"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        query = "SELECT * FROM preset_topics WHERE grade = %s"
+        params = [grade]
+        
+        if subject:
+            query += " AND subject = %s"
+            params.append(subject)
+        
+        if difficulty:
+            query += " AND difficulty = %s"
+            params.append(difficulty)
+        
+        query += " ORDER BY subject, topic"
+        
+        cur.execute(query, params)
+        topics = cur.fetchall()
+        cur.close()
+        
+        return [dict(t) for t in topics]
+    finally:
+        if conn:
+            conn.close()
+
+def get_preset_topics_count():
+    """Get count of preset topics to check if populated"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("SELECT COUNT(*) as count FROM preset_topics")
+        result = cur.fetchone()
+        cur.close()
+        
+        return result['count'] if result else 0
     finally:
         if conn:
             conn.close()
