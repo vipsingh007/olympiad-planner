@@ -91,71 +91,138 @@ if not st.session_state.authenticated:
         # STUDENT LOGIN
         with tab1:
             st.markdown("#### Student Portal")
-            student_email = st.text_input("Email", key="student_email", placeholder="student@example.com")
-            student_password = st.text_input("Password", type="password", key="student_pass")
             
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
+            login_signup = st.radio("", ["Login", "Sign Up"], horizontal=True, key="student_mode")
+            
+            if login_signup == "Login":
+                student_email = st.text_input("Email", key="student_email", placeholder="student@example.com")
+                student_password = st.text_input("Password", type="password", key="student_pass")
+                
                 if st.button("🎓 Login as Student", type="primary", use_container_width=True):
-                    # TODO: Replace with actual authentication
                     if student_email and student_password:
-                        st.session_state.authenticated = True
-                        st.session_state.user_type = "student"
-                        st.session_state.user_data = {
-                            "email": student_email,
-                            "name": student_email.split('@')[0].title(),
-                            "id": 1
-                        }
-                        st.success("✅ Welcome!")
-                        st.rerun()
+                        try:
+                            user = db.authenticate_gyaan_user(student_email, student_password)
+                            if user and user['user_type'] == 'student':
+                                st.session_state.authenticated = True
+                                st.session_state.user_type = "student"
+                                st.session_state.user_data = user
+                                st.success("✅ Welcome!")
+                                st.rerun()
+                            else:
+                                st.error("Invalid credentials or not a student account")
+                        except Exception as e:
+                            st.error(f"Login failed: {str(e)}")
                     else:
                         st.error("Please enter credentials")
             
-            with col_s2:
-                if st.button("📝 Sign Up", use_container_width=True):
-                    st.info("Signup feature coming soon!")
+            else:  # Sign Up
+                new_name = st.text_input("Full Name", key="student_signup_name")
+                new_email = st.text_input("Email", key="student_signup_email")
+                new_password = st.text_input("Password", type="password", key="student_signup_pass")
+                new_grade = st.selectbox("Grade", [f"Grade {i}" for i in range(1, 13)], key="student_grade")
+                
+                if st.button("📝 Create Account", type="primary", use_container_width=True):
+                    if new_name and new_email and new_password and len(new_password) >= 6:
+                        try:
+                            user_id = db.create_gyaan_user(new_email, new_password, new_name, "student", grade=new_grade)
+                            st.success(f"✅ Account created! Please login.")
+                            st.balloons()
+                        except Exception as e:
+                            st.error(f"Signup failed: {str(e)}")
+                    else:
+                        st.error("Please fill all fields (password min 6 characters)")
         
         # TEACHER LOGIN
         with tab2:
             st.markdown("#### Teacher Portal")
-            teacher_email = st.text_input("Email", key="teacher_email", placeholder="teacher@example.com")
-            teacher_password = st.text_input("Password", type="password", key="teacher_pass")
             
-            if st.button("👨‍🏫 Login as Teacher", type="primary", use_container_width=True):
-                # TODO: Replace with actual authentication
-                if teacher_email and teacher_password:
-                    st.session_state.authenticated = True
-                    st.session_state.user_type = "teacher"
-                    st.session_state.user_data = {
-                        "email": teacher_email,
-                        "name": teacher_email.split('@')[0].title(),
-                        "id": 1
-                    }
-                    st.success("✅ Welcome Teacher!")
-                    st.rerun()
-                else:
-                    st.error("Please enter credentials")
+            teacher_mode = st.radio("", ["Login", "Sign Up"], horizontal=True, key="teacher_mode")
+            
+            if teacher_mode == "Login":
+                teacher_email = st.text_input("Email", key="teacher_email", placeholder="teacher@example.com")
+                teacher_password = st.text_input("Password", type="password", key="teacher_pass")
+                
+                if st.button("👨‍🏫 Login as Teacher", type="primary", use_container_width=True):
+                    if teacher_email and teacher_password:
+                        try:
+                            user = db.authenticate_gyaan_user(teacher_email, teacher_password)
+                            if user and user['user_type'] == 'teacher':
+                                st.session_state.authenticated = True
+                                st.session_state.user_type = "teacher"
+                                st.session_state.user_data = user
+                                st.success("✅ Welcome Teacher!")
+                                st.rerun()
+                            else:
+                                st.error("Invalid credentials or not a teacher account")
+                        except Exception as e:
+                            st.error(f"Login failed: {str(e)}")
+                    else:
+                        st.error("Please enter credentials")
+            
+            else:  # Sign Up
+                new_name = st.text_input("Full Name", key="teacher_signup_name")
+                new_email = st.text_input("Email", key="teacher_signup_email")
+                new_password = st.text_input("Password", type="password", key="teacher_signup_pass")
+                new_phone = st.text_input("Phone (optional)", key="teacher_phone")
+                
+                if st.button("📝 Create Teacher Account", type="primary", use_container_width=True):
+                    if new_name and new_email and new_password and len(new_password) >= 6:
+                        try:
+                            user_id = db.create_gyaan_user(new_email, new_password, new_name, "teacher", phone=new_phone)
+                            st.success(f"✅ Teacher account created! Please login.")
+                            st.balloons()
+                        except Exception as e:
+                            st.error(f"Signup failed: {str(e)}")
+                    else:
+                        st.error("Please fill all fields (password min 6 characters)")
         
         # ADMIN LOGIN
         with tab3:
             st.markdown("#### Admin Portal")
-            admin_email = st.text_input("Email", key="admin_email", placeholder="admin@example.com")
-            admin_password = st.text_input("Password", type="password", key="admin_pass")
             
-            if st.button("👤 Login as Admin", type="primary", use_container_width=True):
-                # TODO: Replace with actual authentication
-                if admin_email and admin_password == "admin123":
-                    st.session_state.authenticated = True
-                    st.session_state.user_type = "admin"
-                    st.session_state.user_data = {
-                        "email": admin_email,
-                        "name": "Administrator",
-                        "id": 1
-                    }
-                    st.success("✅ Welcome Admin!")
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials")
+            admin_mode = st.radio("", ["Login", "Create Admin"], horizontal=True, key="admin_mode")
+            
+            if admin_mode == "Login":
+                admin_email = st.text_input("Email", key="admin_email", placeholder="admin@example.com")
+                admin_password = st.text_input("Password", type="password", key="admin_pass")
+                
+                if st.button("👤 Login as Admin", type="primary", use_container_width=True):
+                    if admin_email and admin_password:
+                        try:
+                            user = db.authenticate_gyaan_user(admin_email, admin_password)
+                            if user and user['user_type'] == 'admin':
+                                st.session_state.authenticated = True
+                                st.session_state.user_type = "admin"
+                                st.session_state.user_data = user
+                                st.success("✅ Welcome Admin!")
+                                st.rerun()
+                            else:
+                                st.error("Invalid credentials or not an admin account")
+                        except Exception as e:
+                            st.error(f"Login failed: {str(e)}")
+                    else:
+                        st.error("Please enter credentials")
+            
+            else:  # Create Admin
+                st.info("⚠️ Admin account creation requires authorization")
+                new_name = st.text_input("Full Name", key="admin_signup_name")
+                new_email = st.text_input("Email", key="admin_signup_email")
+                new_password = st.text_input("Password", type="password", key="admin_signup_pass")
+                admin_code = st.text_input("Admin Code", type="password", key="admin_code", help="Contact system administrator for code")
+                
+                if st.button("🔐 Create Admin Account", type="primary", use_container_width=True):
+                    if admin_code == "GYAAN2024":  # Secret admin code
+                        if new_name and new_email and new_password and len(new_password) >= 6:
+                            try:
+                                user_id = db.create_gyaan_user(new_email, new_password, new_name, "admin")
+                                st.success(f"✅ Admin account created! Please login.")
+                                st.balloons()
+                            except Exception as e:
+                                st.error(f"Signup failed: {str(e)}")
+                        else:
+                            st.error("Please fill all fields (password min 6 characters)")
+                    else:
+                        st.error("Invalid admin code")
     
     st.markdown("---")
     st.info("🎯 **Demo Credentials:** Use any email. Teacher/Student: any password. Admin: 'admin123'")
@@ -222,35 +289,60 @@ if user_type == "admin":
             class_duration = st.number_input("Duration (minutes)", min_value=30, max_value=180, value=60, step=15)
             max_students = st.number_input("Max Students", min_value=1, max_value=100, value=30)
         
+        class_price = st.number_input("Class Price (₹)", min_value=0, max_value=10000, value=499, step=100)
         class_description = st.text_area("Class Description", placeholder="What will students learn in this class?")
         
         if st.button("📅 Schedule Class", type="primary"):
-            if class_title and class_description:
-                st.success(f"✅ Class '{class_title}' scheduled successfully!")
-                st.balloons()
+            if class_title and class_description and class_date and class_time:
+                try:
+                    # Save to database
+                    class_id = db.schedule_class(
+                        title=class_title,
+                        description=class_description,
+                        subject=class_subject,
+                        grade=", ".join(class_grade) if class_grade else "All Grades",
+                        teacher_id=1,  # TODO: Get actual teacher ID
+                        class_date=class_date,
+                        class_time=class_time,
+                        duration_minutes=class_duration,
+                        max_students=max_students,
+                        price=class_price
+                    )
+                    st.success(f"✅ Class '{class_title}' scheduled successfully! (ID: {class_id})")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Failed to schedule class: {str(e)}")
             else:
                 st.error("Please fill in all required fields")
         
         st.markdown("---")
-        st.subheader("📋 Upcoming Scheduled Classes")
+        st.subheader("📋 All Scheduled Classes")
         
-        # Sample scheduled classes
-        scheduled_classes = [
-            {"title": "Python Basics", "teacher": "Dr. Amit Kumar", "date": "2024-12-01", "time": "10:00 AM", "students": 25},
-            {"title": "Math Olympiad Prep", "teacher": "Prof. Priya Sharma", "date": "2024-12-02", "time": "2:00 PM", "students": 30},
-            {"title": "Creative Writing", "teacher": "Mr. Rahul Verma", "date": "2024-12-03", "time": "4:00 PM", "students": 15},
-        ]
-        
-        for idx, cls in enumerate(scheduled_classes):
-            with st.expander(f"📚 {cls['title']} - {cls['date']} at {cls['time']}"):
-                col_c1, col_c2, col_c3 = st.columns(3)
-                with col_c1:
-                    st.write(f"**Teacher:** {cls['teacher']}")
-                with col_c2:
-                    st.write(f"**Students:** {cls['students']}/30")
-                with col_c3:
-                    if st.button("🗑️ Cancel", key=f"cancel_{idx}"):
-                        st.warning("Class cancelled")
+        # Fetch classes from database
+        try:
+            all_classes = db.get_all_classes()
+            if all_classes:
+                for idx, cls in enumerate(all_classes):
+                    status_icon = "🔴" if cls['status'] == 'ongoing' else "🟢" if cls['status'] == 'scheduled' else "⚪"
+                    with st.expander(f"{status_icon} {cls['title']} - {cls['class_date']} at {cls['class_time']}"):
+                        col_c1, col_c2, col_c3 = st.columns(3)
+                        with col_c1:
+                            st.write(f"**Subject:** {cls['subject']}")
+                            st.write(f"**Grade:** {cls['grade']}")
+                            st.write(f"**Teacher:** {cls.get('teacher_name', 'TBD')}")
+                        with col_c2:
+                            st.write(f"**Duration:** {cls['duration_minutes']} min")
+                            st.write(f"**Price:** ₹{cls['price']}")
+                            st.write(f"**Max Students:** {cls['max_students']}")
+                        with col_c3:
+                            st.write(f"**Status:** {cls['status'].title()}")
+                            if st.button("🗑️ Delete", key=f"delete_{idx}"):
+                                st.warning("Class deletion feature coming soon")
+                        st.write(f"**Description:** {cls['description']}")
+            else:
+                st.info("📝 No classes scheduled yet. Create your first class above!")
+        except Exception as e:
+            st.error(f"Error loading classes: {str(e)}")
     
     with admin_tab2:
         st.header("👨‍🏫 Teacher Management")
