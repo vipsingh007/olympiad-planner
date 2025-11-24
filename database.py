@@ -1312,3 +1312,60 @@ def get_all_students():
     finally:
         if conn:
             conn.close()
+
+def update_teacher_profile(teacher_id, subjects=None, bio=None, experience=None, qualifications=None):
+    """Update teacher profile information"""
+    conn = None
+    try:
+        conn = get_gyaan_db_connection()
+        cur = conn.cursor()
+        
+        # Build update query dynamically based on provided fields
+        updates = []
+        params = []
+        
+        if subjects is not None:
+            updates.append("subjects = %s")
+            params.append(subjects)
+        
+        if bio is not None:
+            updates.append("bio = %s")
+            params.append(bio)
+        
+        # Add experience and qualifications columns if they don't exist
+        # First, check if columns exist and add them
+        cur.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='gyaan_teachers' AND column_name IN ('experience', 'qualifications')
+        """)
+        existing_cols = [row['column_name'] for row in cur.fetchall()]
+        
+        if 'experience' not in existing_cols:
+            cur.execute("ALTER TABLE gyaan_teachers ADD COLUMN IF NOT EXISTS experience TEXT")
+        if 'qualifications' not in existing_cols:
+            cur.execute("ALTER TABLE gyaan_teachers ADD COLUMN IF NOT EXISTS qualifications TEXT")
+        
+        if experience is not None:
+            updates.append("experience = %s")
+            params.append(experience)
+        
+        if qualifications is not None:
+            updates.append("qualifications = %s")
+            params.append(qualifications)
+        
+        if updates:
+            params.append(teacher_id)
+            query = f"UPDATE gyaan_teachers SET {', '.join(updates)} WHERE id = %s"
+            cur.execute(query, params)
+            conn.commit()
+        
+        cur.close()
+        return True
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise Exception(f"Failed to update teacher profile: {str(e)}")
+    finally:
+        if conn:
+            conn.close()

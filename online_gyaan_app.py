@@ -545,11 +545,12 @@ elif user_type == "teacher":
     st.title("👨‍🏫 Teacher Dashboard")
     st.markdown(f"**Welcome back, {user_data['name']}!**")
     
-    teacher_tab1, teacher_tab2, teacher_tab3, teacher_tab4 = st.tabs([
+    teacher_tab1, teacher_tab2, teacher_tab3, teacher_tab4, teacher_tab5 = st.tabs([
         "🎥 My Classes",
         "📅 Schedule",
         "👥 Students",
-        "📊 Performance"
+        "📊 Performance",
+        "👤 Profile"
     ])
     
     with teacher_tab1:
@@ -724,8 +725,122 @@ elif user_type == "teacher":
         st.line_chart([25, 28, 26, 30, 28, 29, 27])
         
         st.subheader("💬 Recent Feedback")
-        st.success("⭐⭐⭐⭐⭐ 'Excellent teacher! Very clear explanations.' - Anaya")
-        st.success("⭐⭐⭐⭐⭐ 'Best coding class ever!' - Rohan")
+        st.info("📝 Feedback from students will appear here once classes are completed.")
+    
+    with teacher_tab5:
+        st.header("👤 My Profile")
+        
+        # Fetch current teacher profile
+        try:
+            teacher_user_id = user_data['id']
+            all_teachers = db.get_all_teachers()
+            teacher_record = next((t for t in all_teachers if t['user_id'] == teacher_user_id), None)
+            
+            if teacher_record:
+                teacher_id = teacher_record['id']
+                
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.subheader("✏️ Edit Profile")
+                    
+                    # Subjects (multi-select)
+                    current_subjects = teacher_record.get('subjects', ['General'])
+                    if isinstance(current_subjects, str):
+                        current_subjects = [current_subjects]
+                    
+                    available_subjects = ["Mathematics", "Science", "English", "Coding", "Art", "Music", 
+                                        "History", "Geography", "Physics", "Chemistry", "Biology"]
+                    selected_subjects = st.multiselect(
+                        "Subjects You Teach",
+                        options=available_subjects,
+                        default=[s for s in current_subjects if s in available_subjects],
+                        help="Select all subjects you can teach"
+                    )
+                    
+                    # Bio
+                    current_bio = teacher_record.get('bio', '')
+                    bio = st.text_area(
+                        "Bio / About Me",
+                        value=current_bio,
+                        placeholder="Tell students about yourself, your teaching style, and what makes your classes special...",
+                        height=100,
+                        help="This will be shown to students when they browse classes"
+                    )
+                    
+                    # Experience
+                    current_experience = teacher_record.get('experience', '')
+                    experience = st.text_area(
+                        "Teaching Experience",
+                        value=current_experience,
+                        placeholder="E.g., '5 years teaching Python at XYZ School'\n'10+ years in software development'\n'Conducted 100+ online classes'",
+                        height=80,
+                        help="Your teaching background and years of experience"
+                    )
+                    
+                    # Qualifications
+                    current_qualifications = teacher_record.get('qualifications', '')
+                    qualifications = st.text_area(
+                        "Qualifications & Certifications",
+                        value=current_qualifications,
+                        placeholder="E.g., 'M.Sc. Computer Science, XYZ University'\n'Google Certified Educator'\n'AWS Certified Solutions Architect'",
+                        height=80,
+                        help="Your educational background and professional certifications"
+                    )
+                    
+                    if st.button("💾 Save Profile", type="primary", use_container_width=True):
+                        try:
+                            db.update_teacher_profile(
+                                teacher_id=teacher_id,
+                                subjects=selected_subjects if selected_subjects else ['General'],
+                                bio=bio,
+                                experience=experience,
+                                qualifications=qualifications
+                            )
+                            st.success("✅ Profile updated successfully!")
+                            st.balloons()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to update profile: {str(e)}")
+                
+                with col2:
+                    st.subheader("👁️ Profile Preview")
+                    
+                    st.markdown(f"**Name:** {teacher_record['name']}")
+                    st.markdown(f"**Email:** {teacher_record['email']}")
+                    
+                    if selected_subjects or current_subjects:
+                        subjects_display = selected_subjects if selected_subjects else current_subjects
+                        st.markdown(f"**Subjects:** {', '.join(subjects_display)}")
+                    
+                    st.markdown("---")
+                    
+                    st.metric("Rating", f"{teacher_record.get('rating', 0):.1f} ⭐")
+                    st.metric("Total Classes", teacher_record.get('total_classes', 0))
+                    st.metric("Total Students", teacher_record.get('total_students', 0))
+                    
+                    st.markdown("---")
+                    
+                    st.info("💡 **Tip:** A complete profile helps students find and trust you!")
+                    
+                    # Profile completeness
+                    completeness = 0
+                    if selected_subjects and len(selected_subjects) > 0:
+                        completeness += 25
+                    if bio and len(bio) > 20:
+                        completeness += 25
+                    if experience and len(experience) > 20:
+                        completeness += 25
+                    if qualifications and len(qualifications) > 20:
+                        completeness += 25
+                    
+                    st.progress(completeness / 100)
+                    st.caption(f"Profile Completeness: {completeness}%")
+                    
+            else:
+                st.warning("⚠️ Teacher profile not found. Please contact admin.")
+        except Exception as e:
+            st.error(f"Error loading profile: {str(e)}")
 
 
 # STUDENT DASHBOARD
