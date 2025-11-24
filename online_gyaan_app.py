@@ -3,8 +3,15 @@ from datetime import datetime, timedelta
 import database as db
 import json
 import hashlib
+import re
 
 st.set_page_config(page_title="🎓 Online Gyaan", layout="wide", page_icon="🎓")
+
+# Helper function for email validation
+def is_valid_email(email):
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
 
 # Initialize database on first run
 if 'db_initialized_gyaan' not in st.session_state:
@@ -117,20 +124,28 @@ if not st.session_state.authenticated:
             
             else:  # Sign Up
                 new_name = st.text_input("Full Name", key="student_signup_name")
-                new_email = st.text_input("Email", key="student_signup_email")
+                new_email = st.text_input("Email", key="student_signup_email", placeholder="student@example.com")
                 new_password = st.text_input("Password", type="password", key="student_signup_pass")
                 new_grade = st.selectbox("Grade", [f"Grade {i}" for i in range(1, 13)], key="student_grade")
                 
                 if st.button("📝 Create Account", type="primary", use_container_width=True):
-                    if new_name and new_email and new_password and len(new_password) >= 6:
+                    if not new_name or not new_email or not new_password:
+                        st.error("❌ Please fill all fields")
+                    elif not is_valid_email(new_email):
+                        st.error("❌ Please enter a valid email address (e.g., student@example.com)")
+                    elif len(new_password) < 6:
+                        st.error("❌ Password must be at least 6 characters long")
+                    else:
                         try:
                             user_id = db.create_gyaan_user(new_email, new_password, new_name, "student", grade=new_grade)
                             st.success(f"✅ Account created! Please login.")
                             st.balloons()
                         except Exception as e:
-                            st.error(f"Signup failed: {str(e)}")
-                    else:
-                        st.error("Please fill all fields (password min 6 characters)")
+                            error_msg = str(e)
+                            if "duplicate key" in error_msg or "already exists" in error_msg:
+                                st.error("❌ This email is already registered. Please use a different email or login.")
+                            else:
+                                st.error(f"❌ Signup failed: {error_msg}")
         
         # TEACHER LOGIN
         with tab2:
@@ -161,20 +176,28 @@ if not st.session_state.authenticated:
             
             else:  # Sign Up
                 new_name = st.text_input("Full Name", key="teacher_signup_name")
-                new_email = st.text_input("Email", key="teacher_signup_email")
+                new_email = st.text_input("Email", key="teacher_signup_email", placeholder="teacher@example.com")
                 new_password = st.text_input("Password", type="password", key="teacher_signup_pass")
-                new_phone = st.text_input("Phone (optional)", key="teacher_phone")
+                new_phone = st.text_input("Phone (optional)", key="teacher_phone", placeholder="+91 9876543210")
                 
                 if st.button("📝 Create Teacher Account", type="primary", use_container_width=True):
-                    if new_name and new_email and new_password and len(new_password) >= 6:
+                    if not new_name or not new_email or not new_password:
+                        st.error("❌ Please fill all required fields")
+                    elif not is_valid_email(new_email):
+                        st.error("❌ Please enter a valid email address (e.g., teacher@example.com)")
+                    elif len(new_password) < 6:
+                        st.error("❌ Password must be at least 6 characters long")
+                    else:
                         try:
                             user_id = db.create_gyaan_user(new_email, new_password, new_name, "teacher", phone=new_phone)
                             st.success(f"✅ Teacher account created! Please login.")
                             st.balloons()
                         except Exception as e:
-                            st.error(f"Signup failed: {str(e)}")
-                    else:
-                        st.error("Please fill all fields (password min 6 characters)")
+                            error_msg = str(e)
+                            if "duplicate key" in error_msg or "already exists" in error_msg:
+                                st.error("❌ This email is already registered. Please use a different email or login.")
+                            else:
+                                st.error(f"❌ Signup failed: {error_msg}")
         
         # ADMIN LOGIN
         with tab3:
@@ -206,26 +229,35 @@ if not st.session_state.authenticated:
             else:  # Create Admin
                 st.info("⚠️ Admin account creation requires authorization")
                 new_name = st.text_input("Full Name", key="admin_signup_name")
-                new_email = st.text_input("Email", key="admin_signup_email")
+                new_email = st.text_input("Email", key="admin_signup_email", placeholder="admin@example.com")
                 new_password = st.text_input("Password", type="password", key="admin_signup_pass")
-                admin_code = st.text_input("Admin Code", type="password", key="admin_code", help="Contact system administrator for code")
+                admin_code = st.text_input("Admin Code", type="password", key="admin_code", help="Use: GYAAN2024")
                 
                 if st.button("🔐 Create Admin Account", type="primary", use_container_width=True):
-                    if admin_code == "GYAAN2024":  # Secret admin code
-                        if new_name and new_email and new_password and len(new_password) >= 6:
-                            try:
-                                user_id = db.create_gyaan_user(new_email, new_password, new_name, "admin")
-                                st.success(f"✅ Admin account created! Please login.")
-                                st.balloons()
-                            except Exception as e:
-                                st.error(f"Signup failed: {str(e)}")
-                        else:
-                            st.error("Please fill all fields (password min 6 characters)")
+                    if not admin_code:
+                        st.error("❌ Please enter the admin code")
+                    elif admin_code != "GYAAN2024":
+                        st.error("❌ Invalid admin code")
+                    elif not new_name or not new_email or not new_password:
+                        st.error("❌ Please fill all required fields")
+                    elif not is_valid_email(new_email):
+                        st.error("❌ Please enter a valid email address (e.g., admin@example.com)")
+                    elif len(new_password) < 6:
+                        st.error("❌ Password must be at least 6 characters long")
                     else:
-                        st.error("Invalid admin code")
+                        try:
+                            user_id = db.create_gyaan_user(new_email, new_password, new_name, "admin")
+                            st.success(f"✅ Admin account created! Please login.")
+                            st.balloons()
+                        except Exception as e:
+                            error_msg = str(e)
+                            if "duplicate key" in error_msg or "already exists" in error_msg:
+                                st.error("❌ This email is already registered. Please use a different email or login.")
+                            else:
+                                st.error(f"❌ Signup failed: {error_msg}")
     
     st.markdown("---")
-    st.info("🎯 **Demo Credentials:** Use any email. Teacher/Student: any password. Admin: 'admin123'")
+    st.caption("💡 **New here?** Click the 'Sign Up' option in your role tab to create an account.")
     st.stop()
 
 # User is authenticated - show appropriate dashboard
