@@ -68,6 +68,33 @@ def initialize_database():
             END $$;
         """)
         
+        # Drop old unique constraint if it exists (for multi-tenant support)
+        cur.execute("""
+            DO $$ 
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'students_student_name_grade_key'
+                ) THEN
+                    ALTER TABLE students DROP CONSTRAINT students_student_name_grade_key;
+                END IF;
+            END $$;
+        """)
+        
+        # Add new unique constraint for multi-tenant (student_name + grade + family_id)
+        cur.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'students_name_grade_family_unique'
+                ) THEN
+                    ALTER TABLE students ADD CONSTRAINT students_name_grade_family_unique 
+                    UNIQUE (student_name, grade, family_id);
+                END IF;
+            END $$;
+        """)
+        
         # Create completed_topics table (if not exists)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS completed_topics (
