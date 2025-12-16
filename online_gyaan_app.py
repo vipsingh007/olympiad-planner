@@ -19,32 +19,26 @@ if 'db_initialized_gyaan' not in st.session_state:
         db.initialize_online_gyaan_db()
         st.session_state.db_initialized_gyaan = True
         st.session_state.db_available = True
+        st.session_state.db_error = None
     except Exception as e:
+        # Silently fail and run in demo mode
         st.session_state.db_initialized_gyaan = False
         st.session_state.db_available = False
         st.session_state.db_error = str(e)
 
-# Show database status
-if not st.session_state.get('db_available', False):
-    st.warning("""
-    ⚠️ **Database Not Connected** 
+# Show database status only if not on login page
+if not st.session_state.get('db_available', False) and st.session_state.get('show_db_warning', True):
+    st.info("""
+    📚 **Running in Demo Mode** 
     
-    Running in **DEMO MODE** with hardcoded data. To enable full functionality:
+    Explore the Online Gyaan platform with demo data! All features are available for testing.
     
-    1. **Configure Supabase secrets** in `.streamlit/secrets.toml`:
-    ```toml
-    [database]
-    url = "your_supabase_connection_string"
-    ```
-    
-    2. **Or** use the same Supabase from Olympic Planner app (if already configured)
-    
-    For now, you can explore the UI and features with demo data! 🎓
+    💡 To enable database persistence, configure Supabase in `.streamlit/secrets.toml`
     """)
     
-    if st.session_state.get('db_error'):
-        with st.expander("🔍 Technical Error Details"):
-            st.code(st.session_state.db_error)
+    if st.session_state.get('db_error') and st.session_state.get('show_technical_details', False):
+        with st.expander("🔍 Technical Details"):
+            st.caption(st.session_state.db_error)
 
 # Add custom CSS for better UI
 st.markdown("""
@@ -105,20 +99,42 @@ if not st.session_state.authenticated:
                 student_email = st.text_input("Email", key="student_email", placeholder="student@example.com")
                 student_password = st.text_input("Password", type="password", key="student_pass")
                 
+                # Show demo credentials hint if in demo mode
+                if not st.session_state.get('db_available', False):
+                    st.caption("💡 Demo: Use `demo@student.com` / `demo123`")
+                
                 if st.button("🎓 Login as Student", type="primary", use_container_width=True):
                     if student_email and student_password:
-                        try:
-                            user = db.authenticate_gyaan_user(student_email, student_password)
-                            if user and user['user_type'] == 'student':
+                        # Demo mode authentication
+                        if not st.session_state.get('db_available', False):
+                            if student_email == "demo@student.com" and student_password == "demo123":
                                 st.session_state.authenticated = True
                                 st.session_state.user_type = "student"
-                                st.session_state.user_data = user
-                                st.success("✅ Welcome!")
+                                st.session_state.user_data = {
+                                    'id': 1,
+                                    'name': 'Demo Student',
+                                    'email': 'demo@student.com',
+                                    'user_type': 'student',
+                                    'grade': 'Grade 10'
+                                }
+                                st.success("✅ Welcome to Demo Mode!")
                                 st.rerun()
                             else:
-                                st.error("Invalid credentials or not a student account")
-                        except Exception as e:
-                            st.error(f"Login failed: {str(e)}")
+                                st.error("Invalid credentials. Use demo@student.com / demo123")
+                        else:
+                            # Database authentication
+                            try:
+                                user = db.authenticate_gyaan_user(student_email, student_password)
+                                if user and user['user_type'] == 'student':
+                                    st.session_state.authenticated = True
+                                    st.session_state.user_type = "student"
+                                    st.session_state.user_data = user
+                                    st.success("✅ Welcome!")
+                                    st.rerun()
+                                else:
+                                    st.error("Invalid credentials or not a student account")
+                            except Exception as e:
+                                st.error(f"Login failed: {str(e)}")
                     else:
                         st.error("Please enter credentials")
             
@@ -157,20 +173,41 @@ if not st.session_state.authenticated:
                 teacher_email = st.text_input("Email", key="teacher_email", placeholder="teacher@example.com")
                 teacher_password = st.text_input("Password", type="password", key="teacher_pass")
                 
+                # Show demo credentials hint if in demo mode
+                if not st.session_state.get('db_available', False):
+                    st.caption("💡 Demo: Use `demo@teacher.com` / `demo123`")
+                
                 if st.button("👨‍🏫 Login as Teacher", type="primary", use_container_width=True):
                     if teacher_email and teacher_password:
-                        try:
-                            user = db.authenticate_gyaan_user(teacher_email, teacher_password)
-                            if user and user['user_type'] == 'teacher':
+                        # Demo mode authentication
+                        if not st.session_state.get('db_available', False):
+                            if teacher_email == "demo@teacher.com" and teacher_password == "demo123":
                                 st.session_state.authenticated = True
                                 st.session_state.user_type = "teacher"
-                                st.session_state.user_data = user
-                                st.success("✅ Welcome Teacher!")
+                                st.session_state.user_data = {
+                                    'id': 2,
+                                    'name': 'Demo Teacher',
+                                    'email': 'demo@teacher.com',
+                                    'user_type': 'teacher'
+                                }
+                                st.success("✅ Welcome to Demo Mode!")
                                 st.rerun()
                             else:
-                                st.error("Invalid credentials or not a teacher account")
-                        except Exception as e:
-                            st.error(f"Login failed: {str(e)}")
+                                st.error("Invalid credentials. Use demo@teacher.com / demo123")
+                        else:
+                            # Database authentication
+                            try:
+                                user = db.authenticate_gyaan_user(teacher_email, teacher_password)
+                                if user and user['user_type'] == 'teacher':
+                                    st.session_state.authenticated = True
+                                    st.session_state.user_type = "teacher"
+                                    st.session_state.user_data = user
+                                    st.success("✅ Welcome Teacher!")
+                                    st.rerun()
+                                else:
+                                    st.error("Invalid credentials or not a teacher account")
+                            except Exception as e:
+                                st.error(f"Login failed: {str(e)}")
                     else:
                         st.error("Please enter credentials")
             
@@ -209,20 +246,41 @@ if not st.session_state.authenticated:
                 admin_email = st.text_input("Email", key="admin_email", placeholder="admin@example.com")
                 admin_password = st.text_input("Password", type="password", key="admin_pass")
                 
+                # Show demo credentials hint if in demo mode
+                if not st.session_state.get('db_available', False):
+                    st.caption("💡 Demo: Use `demo@admin.com` / `demo123`")
+                
                 if st.button("👤 Login as Admin", type="primary", use_container_width=True):
                     if admin_email and admin_password:
-                        try:
-                            user = db.authenticate_gyaan_user(admin_email, admin_password)
-                            if user and user['user_type'] == 'admin':
+                        # Demo mode authentication
+                        if not st.session_state.get('db_available', False):
+                            if admin_email == "demo@admin.com" and admin_password == "demo123":
                                 st.session_state.authenticated = True
                                 st.session_state.user_type = "admin"
-                                st.session_state.user_data = user
-                                st.success("✅ Welcome Admin!")
+                                st.session_state.user_data = {
+                                    'id': 3,
+                                    'name': 'Demo Admin',
+                                    'email': 'demo@admin.com',
+                                    'user_type': 'admin'
+                                }
+                                st.success("✅ Welcome to Demo Mode!")
                                 st.rerun()
                             else:
-                                st.error("Invalid credentials or not an admin account")
-                        except Exception as e:
-                            st.error(f"Login failed: {str(e)}")
+                                st.error("Invalid credentials. Use demo@admin.com / demo123")
+                        else:
+                            # Database authentication
+                            try:
+                                user = db.authenticate_gyaan_user(admin_email, admin_password)
+                                if user and user['user_type'] == 'admin':
+                                    st.session_state.authenticated = True
+                                    st.session_state.user_type = "admin"
+                                    st.session_state.user_data = user
+                                    st.success("✅ Welcome Admin!")
+                                    st.rerun()
+                                else:
+                                    st.error("Invalid credentials or not an admin account")
+                            except Exception as e:
+                                st.error(f"Login failed: {str(e)}")
                     else:
                         st.error("Please enter credentials")
             

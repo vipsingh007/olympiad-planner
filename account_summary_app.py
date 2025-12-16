@@ -6,8 +6,11 @@ from datetime import datetime
 
 # Use environment variable for API key (more secure)
 api_key = os.getenv("OPENAI_API_KEY", "")
+# Fallback to Streamlit secrets if environment variable is not set
+if not api_key and hasattr(st, 'secrets') and 'OPENAI_API_KEY' in st.secrets:
+    api_key = st.secrets["OPENAI_API_KEY"]
 if not api_key:
-    st.error("⚠️ Please set OPENAI_API_KEY environment variable")
+    st.error("⚠️ Please set OPENAI_API_KEY environment variable or add it to .streamlit/secrets.toml")
     st.stop()
 
 client = OpenAI(api_key=api_key)
